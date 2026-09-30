@@ -1,5 +1,6 @@
 BEGIN;
 
+-- Usuarios y contrapartes: las restricciones limitan identificadores y condiciones fiscales validas.
 CREATE TABLE usuarios (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nombre VARCHAR(120) NOT NULL,
@@ -67,6 +68,7 @@ CREATE TABLE formas_pago (
     activo BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+-- Operaciones comerciales: cabeceras con totales, detalles con valores por renglon y comprobantes unicos.
 CREATE SEQUENCE numero_comprobante_seq START WITH 1;
 
 CREATE TABLE ventas (
@@ -135,6 +137,7 @@ CREATE TABLE pagos_operacion (
     CHECK ((venta_id IS NOT NULL)::INTEGER + (compra_id IS NOT NULL)::INTEGER = 1)
 );
 
+-- El saldo de stock se acompana de un historial que valida cantidad y referencia de compra/venta.
 CREATE TABLE movimientos_stock (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     producto_id BIGINT NOT NULL REFERENCES productos(id),
@@ -175,6 +178,7 @@ CREATE TABLE liquidaciones_iva (
     )
 );
 
+-- Asientos y renglones del diario: cada operacion referencia su origen y cada linea una cuenta.
 CREATE TABLE asientos (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     fecha DATE NOT NULL,
@@ -221,6 +225,7 @@ CREATE INDEX idx_asientos_fecha_tipo ON asientos (fecha, tipo_operacion);
 CREATE INDEX idx_detalle_asientos_cuenta ON detalle_asientos (cuenta_id, asiento_id);
 CREATE INDEX idx_movimientos_stock_producto_fecha ON movimientos_stock (producto_id, fecha);
 
+-- Plan contable y medios de pago iniciales; los codigos conectan cada medio con sus cuentas.
 INSERT INTO cuentas_contables (codigo, nombre, tipo) VALUES
     ('1.1.01', 'Caja', 'ACTIVO'),
     ('1.1.02', 'Banco Cuenta Corriente', 'ACTIVO'),

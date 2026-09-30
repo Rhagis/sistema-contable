@@ -1,5 +1,6 @@
 import { pool } from '../config/db.js'
 
+// Agrupa cambios de negocio: un error revierte todo y siempre libera la conexion.
 export async function withTransaction(work) {
   const client = await pool.connect()
   try {

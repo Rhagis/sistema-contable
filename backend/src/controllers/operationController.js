@@ -2,6 +2,7 @@ import { pool } from '../config/db.js'
 import { httpError } from '../middleware/errors.js'
 import { createPurchase, createSale } from '../services/operationService.js'
 
+// El controlador mantiene el contrato HTTP y delega reglas y persistencia al servicio transaccional.
 export async function addSale(request, response, next) {
   try {
     response.status(201).json(await createSale(request.body, request.user.id))
@@ -20,6 +21,7 @@ export async function addPurchase(request, response, next) {
 
 export async function listOperations(request, response, next) {
   try {
+    // El tipo determina las tablas relacionadas; el id opcional cambia lista por detalle.
     const isSale = request.params.type === 'ventas'
     const table = isSale ? 'ventas' : 'compras'
     const party = isSale ? 'clientes' : 'proveedores'

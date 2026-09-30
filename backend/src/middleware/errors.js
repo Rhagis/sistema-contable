@@ -1,3 +1,4 @@
+// Convierte errores de PostgreSQL y de validacion en respuestas HTTP consistentes.
 export function notFound(request, response) {
   response.status(404).json({ message: 'Recurso no encontrado.' })
 }
@@ -25,6 +26,7 @@ export function errorHandler(error, request, response, next) {
   return response.status(500).json({ message: 'Ocurrió un error interno.' })
 }
 
+// Crea errores que pueden viajar desde servicios hasta el middleware HTTP sin perder su estado.
 export function httpError(status, message) {
   const error = new Error(message)
   error.status = status

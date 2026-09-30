@@ -11,6 +11,7 @@ const cookieOptions = () => ({
   path: '/',
 })
 
+// Valida credenciales, firma una sesion de ocho horas y entrega el JWT en cookie httpOnly.
 export async function login(request, response, next) {
   try {
     const { email, password } = request.body
@@ -37,11 +38,13 @@ export async function login(request, response, next) {
   }
 }
 
+// Invalida la sesion eliminando la cookie del navegador.
 export function logout(request, response) {
   response.clearCookie('token', { ...cookieOptions(), maxAge: undefined })
   response.status(204).end()
 }
 
+// Devuelve la identidad que requireAuth ya verifico a partir de la cookie.
 export function currentUser(request, response) {
   response.json({ user: request.user })
 }

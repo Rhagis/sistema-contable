@@ -5,6 +5,7 @@ import { withTransaction } from './transactionService.js'
 
 const IVA_RATE = new Decimal('0.21')
 
+// Convierte importes a Decimal y centavos para evitar errores de redondeo de Number.
 function money(value, label) {
   try {
     const amount = new Decimal(String(value))
@@ -29,9 +30,11 @@ function validateItems(items) {
     if (productIds.has(id)) throw httpError(400, 'No repita productos; consolide las cantidades en un solo renglón.')
     productIds.add(id)
   }
+  // El orden estable reduce conflictos si dos operaciones bloquean varios productos.
   return [...items].sort((left, right) => Number(left.producto_id) - Number(right.producto_id))
 }
 
+// Bloquea filas hasta confirmar la transaccion para impedir que ventas concurrentes usen el mismo stock.
 async function lockProducts(client, items) {
   const products = new Map()
   for (const item of items) {
@@ -45,6 +48,7 @@ async function lockProducts(client, items) {
   return products
 }
 
+// Calcula neto, IVA y costo de cada renglon con precios decimales exactos.
 function calculateLines(items, products, isSale) {
   return items.map((item) => {
     const product = products.get(Number(item.producto_id))
@@ -85,6 +89,7 @@ async function validatePayments(client, payments, total, operation) {
     throw httpError(400, 'La suma de las formas de pago debe coincidir con el total de la operación.')
   }
 
+  // La cuenta asociada depende de si se cobra una venta o se paga una compra.
   for (const payment of normalized) {
     const { rows } = await client.query(
       `SELECT fp.id, fp.cuenta_${operation}_id AS cuenta_id
@@ -123,6 +128,7 @@ async function writeStockMovement(client, { product, item, date, type, reference
   )
 }
 
+// Venta: valida cliente/stock, calcula comprobante e IVA, registra pagos y asientos de venta y CMV.
 export async function createSale(input, userId) {
   const items = validateItems(input.items)
   if (!input.cliente_id || !input.fecha) throw httpError(400, 'Cliente y fecha son obligatorios.')
@@ -146,6 +152,7 @@ export async function createSale(input, userId) {
     const tax = sum(lines, 'iva')
     const total = net.plus(tax)
     const payments = await validatePayments(client, input.pagos, total, 'venta')
+    // La condicion fiscal del cliente determina el tipo de factura emitida.
     const invoiceType = customer.condicion_iva === 'RESPONSABLE_INSCRIPTO' ? 'FACTURA_A' : 'FACTURA_B'
     const { rows } = await client.query(
       `INSERT INTO ventas (cliente_id, fecha, tipo_comprobante, neto, iva, total, creado_por)
@@ -153,6 +160,7 @@ export async function createSale(input, userId) {
       [customer.id, input.fecha, invoiceType, net.toFixed(2), tax.toFixed(2), total.toFixed(2), userId],
     )
     const sale = rows[0]
+    // El snapshot impide que compras futuras alteren el costo historico de esta venta.
     const cost = sum(lines.map((line) => ({ costo: line.costoUnitario.mul(line.cantidad) })), 'costo')
 
     for (const line of lines) {
@@ -197,6 +205,7 @@ export async function createSale(input, userId) {
   })
 }
 
+// Compra: registra factura, aumenta stock/costo, guarda pagos y contabiliza IVA credito.
 export async function createPurchase(input, userId) {
   const items = validateItems(input.items)
   if (!input.proveedor_id || !input.fecha || !input.numero_comprobante) {

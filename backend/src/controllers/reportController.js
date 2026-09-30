@@ -7,6 +7,7 @@ import { withTransaction } from '../services/transactionService.js'
 const validPeriod = (mes, anio) => Number.isInteger(mes) && mes >= 1 && mes <= 12
   && Number.isInteger(anio) && anio >= 2000 && anio <= 9999
 
+// Devuelve lineas del diario con filtros opcionales por asiento, fechas y tipo.
 export async function journal(request, response, next) {
   try {
     const { desde, hasta, tipo } = request.query
@@ -35,6 +36,7 @@ export async function journal(request, response, next) {
   }
 }
 
+// Acumula movimientos y calcula el saldo segun la naturaleza de la cuenta contable.
 export async function ledger(request, response, next) {
   try {
     const { cuentaId } = request.params
@@ -64,6 +66,7 @@ export async function ledger(request, response, next) {
   }
 }
 
+// Calcula debito menos credito del periodo y consulta si ya existe una liquidacion.
 export async function vatSummary(request, response, next) {
   try {
     const mes = Number(request.query.mes)
@@ -90,6 +93,7 @@ export async function vatSummary(request, response, next) {
   }
 }
 
+// Cierra el periodo en una transaccion: resumen, liquidacion y asiento de cierre.
 export async function settleVat(request, response, next) {
   try {
     const mes = Number(request.body.mes)
@@ -106,6 +110,7 @@ export async function settleVat(request, response, next) {
       const debit = new Decimal(rows[0].iva_debito)
       const credit = new Decimal(rows[0].iva_credito)
       const balance = debit.minus(credit)
+      // El signo del saldo define el resultado y la cuenta de contrapartida del asiento.
       const resultado = balance.isPositive() ? 'A_PAGAR' : balance.isNegative() ? 'SALDO_A_FAVOR' : 'SIN_SALDO'
       const { rows: inserted } = await client.query(
         `INSERT INTO liquidaciones_iva (mes, anio, iva_debito, iva_credito, saldo, resultado, creado_por)
@@ -138,6 +143,7 @@ export async function settleVat(request, response, next) {
   }
 }
 
+// Agrupa indicadores del mes, alertas de stock y operaciones recientes para la pantalla inicial.
 export async function dashboard(request, response, next) {
   try {
     const [sales, purchases, lowStock, recent] = await Promise.all([
@@ -164,6 +170,7 @@ export async function dashboard(request, response, next) {
   }
 }
 
+// Catalogos auxiliares que la interfaz usa para formularios y movimientos contables.
 export async function accounts(request, response, next) {
   try {
     const { rows } = await pool.query(

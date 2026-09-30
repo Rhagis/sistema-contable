@@ -5,11 +5,13 @@ import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
 
+// Protege todas las consultas y escrituras de negocio de este router.
 router.use(requireAuth)
 router.get('/dashboard', dashboard)
 router.get('/cuentas', accounts)
 router.get('/formas-pago', paymentMethods)
 router.post('/ventas', addSale)
+// Fija el tipo antes de reutilizar el controlador generico de lista y detalle.
 router.get('/ventas', (request, response, next) => {
   request.params.type = 'ventas'
   return listOperations(request, response, next)

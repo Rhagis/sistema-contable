@@ -4,6 +4,7 @@ import Decimal from 'decimal.js'
 import { createJournal } from '../src/services/accountingService.js'
 
 function fakeClient() {
+  // Registra SQL sin conectarse a PostgreSQL y simula el id devuelto al insertar un asiento.
   const queries = []
   return {
     queries,
@@ -15,6 +16,7 @@ function fakeClient() {
   }
 }
 
+// Verifica que se persisten lineas efectivas y se conservan los importes con centavos.
 test('guarda un asiento balanceado y omite líneas de importe cero', async () => {
   const client = fakeClient()
   const id = await createJournal(client, {
@@ -32,6 +34,7 @@ test('guarda un asiento balanceado y omite líneas de importe cero', async () =>
   assert.equal(client.queries[2].values[3], '100.25')
 })
 
+// Un asiento descuadrado debe fallar antes de ejecutar cualquier INSERT.
 test('rechaza un asiento descuadrado antes de insertar', async () => {
   const client = fakeClient()
   await assert.rejects(
@@ -44,6 +47,7 @@ test('rechaza un asiento descuadrado antes de insertar', async () => {
   assert.equal(client.queries.length, 0)
 })
 
+// Evita crear cabeceras contables sin movimientos efectivos.
 test('rechaza asientos vacíos aunque tengan renglones en cero', async () => {
   const client = fakeClient()
   await assert.rejects(

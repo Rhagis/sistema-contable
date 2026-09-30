@@ -1,5 +1,6 @@
 BEGIN;
 
+-- Inserta contrapartes de prueba con identificadores ficticios y sin duplicar datos existentes.
 INSERT INTO clientes (razon_social, identificacion, domicilio, condicion_iva)
 SELECT 'ELECTRO SUR S.R.L.', 'TEST-DNI-0001', 'Av. Corrientes 1000, C.A.B.A.', 'RESPONSABLE_INSCRIPTO'
 WHERE NOT EXISTS (SELECT 1 FROM clientes WHERE identificacion = 'TEST-DNI-0001');
@@ -16,6 +17,7 @@ INSERT INTO proveedores (razon_social, cuit, domicilio, condicion_iva)
 SELECT 'EQUIPAMIENTOS DEL SUR S.R.L.', 'TEST-CUIT-0002', 'Buenos Aires', 'RESPONSABLE_INSCRIPTO'
 WHERE NOT EXISTS (SELECT 1 FROM proveedores WHERE cuit = 'TEST-CUIT-0002');
 
+-- Adapta los productos base al caso de prueba solo si el nombre de destino aun no existe.
 UPDATE productos
 SET nombre = 'Pagina e-commerce',
         descripcion = 'Sistema e-commerce con mantenimiento mensual de $1.000.000',
@@ -48,6 +50,7 @@ SET nombre = 'Pagina red social',
 WHERE nombre = 'Dominio, hosting y certificado SSL'
     AND NOT EXISTS (SELECT 1 FROM productos WHERE nombre = 'Pagina red social');
 
+-- Completa el inventario de demostracion con stock inicial para ejecutar compras y ventas.
 INSERT INTO productos (nombre, descripcion, stock, costo_unitario, precio_venta)
 SELECT demo.nombre, demo.descripcion, 100, demo.costo, demo.precio
 FROM (VALUES

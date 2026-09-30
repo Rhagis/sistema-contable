@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth.js'
 const router = Router()
 const resources = ['productos', 'clientes', 'proveedores']
 
+// Registra el mismo CRUD protegido para cada catalogo; DELETE realiza una baja logica.
 for (const resource of resources) {
   const controller = catalogController(resource)
   router.get(`/${resource}`, requireAuth, controller.list)

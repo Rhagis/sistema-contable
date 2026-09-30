@@ -2,6 +2,7 @@ import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import { pool } from '../src/config/db.js'
 
+// Crea o reactiva al administrador inicial y guarda la contrasena unicamente como hash bcrypt.
 try {
   const { ADMIN_NAME, ADMIN_EMAIL, ADMIN_PASSWORD } = process.env
   if (!ADMIN_NAME || !ADMIN_EMAIL || !ADMIN_PASSWORD) {

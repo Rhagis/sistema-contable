@@ -5,6 +5,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // En desarrollo, las llamadas relativas a /api se reenvian al servidor Express.
     proxy: {
       '/api': 'http://localhost:3000',
     },

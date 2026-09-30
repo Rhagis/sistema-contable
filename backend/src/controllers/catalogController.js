@@ -6,6 +6,7 @@ import {
   updateCatalog,
 } from '../services/catalogService.js'
 
+// Adapta las solicitudes HTTP a las operaciones comunes del servicio para cada catalogo.
 export function catalogController(name) {
   return {
     list: async (request, response, next) => {

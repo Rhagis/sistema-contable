@@ -1,12 +1,15 @@
 import Decimal from 'decimal.js'
 import { httpError } from '../middleware/errors.js'
 
+// Resuelve codigos estables del plan contable a ids para construir lineas de asiento.
 export async function getAccountIds(client) {
   const { rows } = await client.query('SELECT id, codigo FROM cuentas_contables WHERE activo = TRUE')
   return Object.fromEntries(rows.map(({ codigo, id }) => [codigo, id]))
 }
 
+// Verifica partida doble antes de escribir cabecera y lineas dentro de la misma transaccion.
 export async function createJournal(client, { fecha, descripcion, tipo, reference, userId, lines }) {
+  // Omite renglones en cero y evita crear asientos sin movimientos efectivos.
   const validLines = lines.filter((line) => new Decimal(line.debe || 0).gt(0) || new Decimal(line.haber || 0).gt(0))
   if (!validLines.length) {
     throw httpError(400, 'El asiento contable no está balanceado.')

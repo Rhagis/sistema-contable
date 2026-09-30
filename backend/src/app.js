@@ -9,11 +9,13 @@ import { errorHandler, notFound } from './middleware/errors.js'
 
 const app = express()
 
+// El orden establece la entrada: seguridad, CORS, parseo de datos y cookies antes de las rutas.
 app.use(helmet())
 app.use(cors({ origin: process.env.WEB_ORIGIN || 'http://localhost:5173', credentials: true }))
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 app.get('/api/health', (request, response) => response.json({ status: 'ok' }))
+// Las rutas de autenticacion son publicas salvo /me; catalogos y operaciones validan sesion.
 app.use('/api/auth', authRoutes)
 app.use('/api', catalogRoutes)
 app.use('/api', operationRoutes)

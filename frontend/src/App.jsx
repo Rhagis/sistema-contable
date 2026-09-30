@@ -7,6 +7,7 @@ import {
 import api, { errorMessage } from './api'
 import './theme.css'
 
+// Secciones visibles de la aplicacion; el id tambien determina que endpoint consulta el panel.
 const sections = [
   { id: 'dashboard', label: 'Resumen', icon: Home },
   { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
@@ -28,6 +29,8 @@ const currentDateLabel = new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium' 
 const currentPeriodLabel = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(new Date())
 const money = (value) => currency.format(Number(value || 0))
 const dateLabel = (value) => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('es-AR') : '—'
+
+// Coordina sesion, datos compartidos, navegacion y formularios de las distintas pantallas.
 function App() {
   const [user, setUser] = useState(null)
   const [section, setSection] = useState('dashboard')
@@ -42,10 +45,12 @@ function App() {
   const [filters, setFilters] = useState({ mes: currentMonth, anio: currentYear, desde: '', hasta: '', tipo: '' })
   const [lookups, setLookups] = useState({ clientes: [], proveedores: [], productos: [], formas: [], cuentas: [] })
 
+  // Al iniciar, intenta recuperar la sesion persistida en la cookie httpOnly.
   useEffect(() => {
     api.get('/auth/me').then(({ data: response }) => setUser(response.user)).catch(() => {})
   }, [])
 
+  // Los catalogos se cargan una vez autenticado el usuario para alimentar formularios y filtros.
   useEffect(() => {
     if (!user) return
     Promise.all([
@@ -57,6 +62,7 @@ function App() {
     })).catch(() => {})
   }, [user])
 
+  // Cada seccion obtiene sus datos del endpoint correspondiente; filtros y cuenta seleccionada disparan recarga.
   useEffect(() => {
     if (!user) return
     const load = async () => {
@@ -76,6 +82,7 @@ function App() {
     load().catch((error) => setNotice(errorMessage(error))).finally(() => setBusy(false))
   }, [section, user, filters, lookups.cuentas])
 
+  // Envia las credenciales y conserva en estado el usuario devuelto por el servidor.
   async function signIn(event) {
     event.preventDefault()
     setBusy(true)
@@ -93,12 +100,14 @@ function App() {
     }
   }
 
+  // Cierra la cookie del servidor y restablece la pantalla al estado de acceso.
   async function signOut() {
     await api.post('/auth/logout').catch(() => {})
     setUser(null)
     setSection('dashboard')
   }
 
+  // Cambia de modulo y limpia datos/edicion temporal para no mezclar formularios entre pantallas.
   function navigate(id) {
     setData(id === 'dashboard' || id === 'iva' ? {} : id === 'mayor' ? { movimientos: [] } : [])
     setSection(id)
@@ -109,6 +118,7 @@ function App() {
     setEditingRecord(null)
   }
 
+  // Publica una venta o compra; el API valida y registra la operacion dentro de una transaccion.
   async function submitOperation(payload) {
     const path = section === 'ventas' ? '/ventas' : '/compras'
     const { data: response } = await api.post(path, payload)
@@ -117,6 +127,7 @@ function App() {
     setSection('dashboard')
   }
 
+  // Crea o actualiza un registro y sincroniza tanto la lista actual como los catalogos compartidos.
   async function submitCatalog(payload, id) {
     const { data: saved } = id
       ? await api.put(`/${section}/${id}`, payload)
@@ -133,6 +144,7 @@ function App() {
     setNotice(id ? 'Registro actualizado correctamente.' : 'Registro creado correctamente.')
   }
 
+  // Permite crear cliente/proveedor desde el formulario de operacion sin perder su contexto.
   async function submitInlineParty(type, payload) {
     const { data: saved } = await api.post(`/${type}`, payload)
     setLookups((previous) => ({ ...previous, [type]: [...previous[type], saved] }))
@@ -142,6 +154,7 @@ function App() {
     return saved
   }
 
+  // Retira de las listas el registro dado de baja por el API sin borrar su historial contable.
   async function deactivate(id) {
     try {
       await api.delete(`/${section}/${id}`)
@@ -153,6 +166,7 @@ function App() {
     }
   }
 
+  // Liquida el mes seleccionado y vuelve a consultar su estado para reflejar el cierre.
   async function settleVat() {
     setBusy(true)
     try {
@@ -167,6 +181,7 @@ function App() {
     }
   }
 
+  // Sin sesion se muestra solo el acceso; autenticado se habilita la navegacion y las vistas.
   if (!user) {
     return (
       <main className="login-screen">
@@ -250,10 +265,12 @@ function App() {
   )
 }
 
+// Encabezado comun para que cada modulo presente contexto y accion principal.
 function PageHeading({ eyebrow, title, detail, action }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{detail && <p>{detail}</p>}</div>{action}</div>
 }
 
+// Resume actividad mensual, posicion de IVA, alertas de inventario y accesos frecuentes.
 function Dashboard({ data, navigate }) {
   const net = Number(data.iva_debito || 0) - Number(data.iva_credito || 0)
   return <>
@@ -287,10 +304,12 @@ function Dashboard({ data, navigate }) {
   </>
 }
 
+// Presenta una cifra del resumen con formato monetario y una categoria visual.
 function Metric({ label, value, icon: Icon, tone, hint }) {
   return <div className={`metric metric-${tone}`}><span className="metric-icon"><Icon size={18} /></span><div className="metric-label">{label}<span>{hint}</span></div><strong>{value || money(0)}</strong><span className="metric-rule" /></div>
 }
 
+// Lista comprobantes y totales para ventas o compras, usando la misma tabla para ambos ciclos.
 function OperationList({ type, rows, onCreate }) {
   const sale = type === 'ventas'
   const operations = Array.isArray(rows) ? rows : []
@@ -305,6 +324,7 @@ function OperationList({ type, rows, onCreate }) {
   </>
 }
 
+// Muestra productos/clientes/proveedores y delega alta, edicion y baja a la pantalla principal.
 function CatalogList({ type, rows, onCreate, onEdit, onDeactivate }) {
   const records = Array.isArray(rows) ? rows : []
   const config = {
@@ -325,6 +345,7 @@ function CatalogList({ type, rows, onCreate, onEdit, onDeactivate }) {
   </>
 }
 
+// Consulta visual del libro diario; los filtros se reflejan en la solicitud al API.
 function JournalView({ rows, filters, setFilters }) {
   const entries = Array.isArray(rows) ? rows : []
   return <>
@@ -337,6 +358,7 @@ function JournalView({ rows, filters, setFilters }) {
   </>
 }
 
+// Muestra los movimientos acumulados de una cuenta elegida del plan contable.
 function LedgerView({ data, accounts, filters, setFilters }) {
   return <>
     <PageHeading eyebrow="CONTABILIDAD / MAYOR" title="Mayor por cuenta" detail="Movimientos y saldo acumulado de una cuenta." />
@@ -348,6 +370,7 @@ function LedgerView({ data, accounts, filters, setFilters }) {
   </>
 }
 
+// Compara debito y credito fiscal y permite registrar una sola liquidacion mensual.
 function VatView({ data, filters, setFilters, onSettle, busy }) {
   const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
   const favor = data.resultado === 'SALDO_A_FAVOR'
@@ -359,6 +382,7 @@ function VatView({ data, filters, setFilters, onSettle, busy }) {
   </>
 }
 
+// Construye el payload de venta/compra; los importes mostrados son una vista previa y el servidor recalcula.
 function OperationForm({ type, lookups, createdParty, onAddParty, onSubmit, onCancel }) {
   const sale = type === 'ventas'
   const [partyId, setPartyId] = useState(createdParty ? String(createdParty.id) : '')
@@ -372,12 +396,14 @@ function OperationForm({ type, lookups, createdParty, onAddParty, onSubmit, onCa
     const product = lookups.productos.find((row) => String(row.id) === String(item.producto_id))
     return Number(item.precio_unitario !== '' ? item.precio_unitario : sale ? product?.precio_venta : product?.costo_unitario) || 0
   }
+  // La interfaz anticipa el total para orientar el pago; la validacion definitiva ocurre en el backend.
   const net = items.reduce((total, item) => total + Math.round(priceFor(item) * Number(item.cantidad || 0) * 100) / 100, 0)
   const tax = Math.round(net * 0.21 * 100) / 100
   const total = net + tax
   const setItem = (index, key, value) => setItems((old) => old.map((item, i) => i === index ? { ...item, [key]: value } : item))
   const setPayment = (index, key, value) => setPaymentRows((old) => old.map((item, i) => i === index ? { ...item, [key]: value } : item))
 
+  // Convierte los controles del formulario al contrato JSON que espera el servicio de operaciones.
   async function submit(event) {
     event.preventDefault()
     setError('')
@@ -410,12 +436,14 @@ function OperationForm({ type, lookups, createdParty, onAddParty, onSubmit, onCa
   </form>
 }
 
+// Formulario reutilizable de productos, clientes y proveedores, con campos segun el catalogo elegido.
 function CatalogForm({ type, initialRecord, onSubmit, onCancel }) {
   const title = { productos: 'Nuevo producto', clientes: 'Nuevo cliente', proveedores: 'Nuevo proveedor' }[type]
   const [cost, setCost] = useState(initialRecord?.costo_unitario || '')
   const [price, setPrice] = useState(initialRecord?.precio_venta || '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  // Normaliza valores del formulario para crear/editar; el backend aplica las reglas finales.
   async function submit(event) {
     event.preventDefault()
     setError('')
@@ -439,6 +467,7 @@ function CatalogForm({ type, initialRecord, onSubmit, onCancel }) {
   </form>
 }
 
+// Cierra por Escape o clic en el fondo y retira el listener al desmontarse.
 function Modal({ children, onClose }) {
   useEffect(() => {
     const close = (event) => { if (event.key === 'Escape') onClose() }
@@ -448,6 +477,7 @@ function Modal({ children, onClose }) {
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-panel">{children}</section></div>
 }
 
+// Mensaje comun para listas y tablas sin registros.
 function EmptyState({ label }) {
   return <div className="empty-state"><span><ClipboardList size={19} /></span>{label}</div>
 }

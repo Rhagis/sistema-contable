@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 
+// Lee el JWT de la cookie, verifica firma y vencimiento, y adjunta su contenido a la solicitud.
 export function requireAuth(request, response, next) {
   const token = request.cookies.token
 

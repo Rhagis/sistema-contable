@@ -4,6 +4,7 @@ import { pool } from './config/db.js'
 
 const port = Number(process.env.PORT || 3000)
 
+// Arranca Express; al recibir SIGTERM se cierra el pool para finalizar conexiones ordenadamente.
 app.listen(port, () => {
   console.log(`API APEX SOFTWARE disponible en http://localhost:${port}`)
 })

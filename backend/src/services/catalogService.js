@@ -2,6 +2,7 @@ import Decimal from 'decimal.js'
 import { pool } from '../config/db.js'
 import { httpError } from '../middleware/errors.js'
 
+// Lista blanca de tablas y campos: reutiliza CRUD sin aceptar identificadores SQL del cliente.
 const catalogs = {
   productos: {
     table: 'productos',
@@ -32,6 +33,7 @@ function normalizeInput(name, input) {
     .filter((field) => input[field] !== undefined)
     .map((field) => [field, input[field]]))
 
+  // Cada catalogo aplica sus validaciones de dominio antes de preparar la consulta.
   if (name === 'productos') {
     if (values.nombre !== undefined && !String(values.nombre).trim()) {
       throw httpError(400, 'El nombre del producto es obligatorio.')
@@ -86,6 +88,7 @@ export async function createCatalog(name, input) {
       throw httpError(400, `El campo ${field} es obligatorio.`)
     }
   }
+  // Si falta el precio de venta, propone un margen inicial del 40% sobre el costo.
   if (name === 'productos' && values.costo_unitario !== undefined && values.precio_venta === undefined) {
     values.precio_venta = new Decimal(String(values.costo_unitario)).mul('1.40').toDecimalPlaces(2).toFixed(2)
   }
@@ -118,6 +121,7 @@ export async function updateCatalog(name, id, input) {
 }
 
 export async function deactivateCatalog(name, id) {
+  // Conserva registros referenciados por operaciones anteriores mediante baja logica.
   const { table } = getCatalog(name)
   const timestamp = name === 'productos' ? ', updated_at = NOW()' : ''
   const { rows } = await pool.query(
