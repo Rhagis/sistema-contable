@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 210" role="img" aria-labelledby="title">
+  <title id="title">Apex Software</title>
+  <defs>
+    <linearGradient id="apex" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#5720a8"/>
+      <stop offset="0.45" stop-color="#2858cf"/>
+      <stop offset="1" stop-color="#20e2e0"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d3fae"/>
+      <stop offset="1" stop-color="#18dcd9"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(20 8)" fill="url(#apex)">
+    <path d="M110 0 0 188c-7 12 2 18 14 12l102-51 82 43-38-63-41-21 50-76 110 166c8 11 19 7 12-7L132 0c-5-9-17-9-22 0Z"/>
+    <path d="m80 157 48-75 42 22-75 40Z" fill="url(#inner)"/>
+  </g>
+</svg>

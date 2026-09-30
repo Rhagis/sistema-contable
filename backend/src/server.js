@@ -5,7 +5,7 @@ import { pool } from './config/db.js'
 const port = Number(process.env.PORT || 3000)
 
 app.listen(port, () => {
-  console.log(`API TECNOHOGAR disponible en http://localhost:${port}`)
+  console.log(`API APEX SOFTWARE disponible en http://localhost:${port}`)
 })
 
 process.on('SIGTERM', async () => {

@@ -12,7 +12,10 @@ try {
   await pool.query(
     `INSERT INTO usuarios (nombre, email, password_hash)
      VALUES ($1, $2, $3)
-     ON CONFLICT (email) DO NOTHING`,
+      ON CONFLICT (email) DO UPDATE
+      SET nombre = EXCLUDED.nombre,
+          password_hash = EXCLUDED.password_hash,
+          activo = TRUE`,
     [ADMIN_NAME, ADMIN_EMAIL.toLowerCase(), passwordHash],
   )
   console.log('Usuario administrador creado o ya existente.')

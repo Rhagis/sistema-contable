@@ -35,6 +35,8 @@ function App() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [modal, setModal] = useState(false)
+  const [partyModalType, setPartyModalType] = useState(null)
+  const [createdParty, setCreatedParty] = useState(null)
   const [editingRecord, setEditingRecord] = useState(null)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [filters, setFilters] = useState({ mes: currentMonth, anio: currentYear, desde: '', hasta: '', tipo: '' })
@@ -102,6 +104,8 @@ function App() {
     setSection(id)
     setMobileMenu(false)
     setModal(false)
+    setPartyModalType(null)
+    setCreatedParty(null)
     setEditingRecord(null)
   }
 
@@ -127,6 +131,15 @@ function App() {
     setModal(false)
     setEditingRecord(null)
     setNotice(id ? 'Registro actualizado correctamente.' : 'Registro creado correctamente.')
+  }
+
+  async function submitInlineParty(type, payload) {
+    const { data: saved } = await api.post(`/${type}`, payload)
+    setLookups((previous) => ({ ...previous, [type]: [...previous[type], saved] }))
+    setCreatedParty(saved)
+    setPartyModalType(null)
+    setNotice(`${type === 'clientes' ? 'Cliente' : 'Proveedor'} creado correctamente.`)
+    return saved
   }
 
   async function deactivate(id) {
@@ -158,10 +171,10 @@ function App() {
     return (
       <main className="login-screen">
         <section className="login-brand">
-          <div className="brand-mark"><span>TH</span><i /></div>
+          <img className="apex-logo-login" src="/Logo%20Apex%20Software.png" alt="Apex Software" />
           <div className="brand-caption">ESTUDIO CONTABLE · 01</div>
           <h1>Las cuentas<br />en su lugar.</h1>
-          <p>TECNOHOGAR S.A. <span>·</span> Sistema de gestión académica</p>
+          <p>APEX SOFTWARE <span>·</span> Desarrollo de paginas web</p>
           <div className="login-ledger"><span>DEBE</span><span>HABER</span><b>$ 1.985.000</b><b>$ 1.985.000</b></div>
         </section>
         <form className="login-form" onSubmit={signIn}>
@@ -183,8 +196,7 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar ${mobileMenu ? 'open' : ''}`}>
         <div className="brand-lockup" onClick={() => navigate('dashboard')} role="button" tabIndex={0}>
-          <div className="brand-mark small"><span>TH</span><i /></div>
-          <div><strong>TECNOHOGAR</strong><small>SISTEMA CONTABLE</small></div>
+          <img className="apex-logo-sidebar" src="/Logo%20Apex%20Software.png" alt="Apex Software" />
         </div>
         <div className="side-caption">GESTIÓN</div>
         <nav aria-label="Navegación principal">
@@ -209,7 +221,7 @@ function App() {
       <main className="main-area">
         <header className="topbar">
           <button className="icon-button menu-button" aria-label="Abrir menú" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={20} /></button>
-          <div className="breadcrumb"><span>TECNOHOGAR S.A.</span><span className="crumb-sep">/</span><b>{pageTitle}</b></div>
+          <div className="breadcrumb"><span>APEX SOFTWARE</span><span className="crumb-sep">/</span><b>{pageTitle}</b></div>
           <div className="topbar-right"><span className="today"><CalendarDays size={15} />{currentDateLabel}</span><span className="top-avatar">{user.nombre?.slice(0, 1) || 'A'}</span></div>
         </header>
 
@@ -223,15 +235,16 @@ function App() {
           {section === 'diario' && <JournalView rows={data} filters={filters} setFilters={setFilters} />}
           {section === 'mayor' && <LedgerView data={data} accounts={lookups.cuentas} filters={filters} setFilters={setFilters} />}
           {section === 'iva' && <VatView data={data} filters={filters} setFilters={setFilters} onSettle={settleVat} busy={busy} />}
-          {!sections.some((item) => item.id === section) && <div className="page-heading"><div className="eyebrow">EMPRESA</div><h1>Configuración</h1><p>TECNOHOGAR S.A. · CUIT 30-71845236-7 · Responsable Inscripto</p></div>}
+          {!sections.some((item) => item.id === section) && <div className="page-heading"><div className="eyebrow">EMPRESA</div><h1>Configuración</h1><p>APEX SOFTWARE · Desarrollo, personalización y mantenimiento de paginas web</p><p>Clientes: empresas, negocios, emprendimientos y personas interesadas. Costos: desarrollo inicial (CapEx), más dominio, hosting, certificados SSL y mantenimiento técnico continuo (OpEx).</p></div>}
         </div>
       </main>
 
-      {modal && <Modal onClose={() => setModal(false)}>
+      {modal && <Modal onClose={() => { setModal(false); setPartyModalType(null) }}>
         {['ventas', 'compras'].includes(section)
-          ? <OperationForm type={section} lookups={lookups} onSubmit={submitOperation} onCancel={() => setModal(false)} />
+          ? <OperationForm key={createdParty?.id || 'new-operation'} type={section} lookups={lookups} createdParty={createdParty} onAddParty={() => { setCreatedParty(null); setPartyModalType(section === 'ventas' ? 'clientes' : 'proveedores') }} onSubmit={submitOperation} onCancel={() => { setModal(false); setPartyModalType(null) }} />
           : <CatalogForm type={section} initialRecord={editingRecord} onSubmit={submitCatalog} onCancel={() => setModal(false)} />}
       </Modal>}
+      {partyModalType && <Modal onClose={() => setPartyModalType(null)}><CatalogForm type={partyModalType} onSubmit={(payload) => submitInlineParty(partyModalType, payload)} onCancel={() => setPartyModalType(null)} /></Modal>}
       {mobileMenu && <button className="mobile-scrim" aria-label="Cerrar menú" onClick={() => setMobileMenu(false)} />}
     </div>
   )
@@ -244,7 +257,7 @@ function PageHeading({ eyebrow, title, detail, action }) {
 function Dashboard({ data, navigate }) {
   const net = Number(data.iva_debito || 0) - Number(data.iva_credito || 0)
   return <>
-    <PageHeading eyebrow={`PANEL GENERAL / ${currentPeriodLabel.toLocaleUpperCase('es-AR')}`} title="Buen día, equipo." detail="Así se mueve TECNOHOGAR este mes." />
+    <PageHeading eyebrow={`PANEL GENERAL / ${currentPeriodLabel.toLocaleUpperCase('es-AR')}`} title="Buen día, equipo." detail="Así se mueve APEX SOFTWARE este mes." />
     <section className="metrics-grid" aria-label="Indicadores del mes">
       <Metric label="Ventas netas" value={money(data.ventas_netas)} icon={ArrowUpRight} tone="green" hint="este mes" />
       <Metric label="Compras netas" value={money(data.compras_netas)} icon={ArrowDownLeft} tone="orange" hint="este mes" />
@@ -296,7 +309,7 @@ function CatalogList({ type, rows, onCreate, onEdit, onDeactivate }) {
   const records = Array.isArray(rows) ? rows : []
   const config = {
     productos: { title: 'Productos', eyebrow: 'INVENTARIO / CATÁLOGO', detail: 'Costos, precios de venta y existencias.' },
-    clientes: { title: 'Clientes', eyebrow: 'CARTERA / CLIENTES', detail: 'Personas y empresas que compran a TECNOHOGAR.' },
+    clientes: { title: 'Clientes', eyebrow: 'CARTERA / CLIENTES', detail: 'Empresas, negocios, emprendimientos y personas interesadas en Apex Software.' },
     proveedores: { title: 'Proveedores', eyebrow: 'ABASTECIMIENTO / PROVEEDORES', detail: 'Empresas que abastecen el inventario.' },
   }[type]
   const product = type === 'productos'
@@ -305,7 +318,7 @@ function CatalogList({ type, rows, onCreate, onEdit, onDeactivate }) {
     <PageHeading {...config} action={<button className="button primary" onClick={onCreate}><Plus size={17} />Nuevo registro</button>} />
     <div className="table-toolbar"><div className="table-count">{records.length} registros activos</div></div>
     <div className="table-wrap"><table><thead><tr>{product ? <><th>PRODUCTO</th><th>STOCK</th><th>COSTO UNITARIO</th><th>PRECIO DE VENTA</th><th /></> : <><th>RAZÓN SOCIAL</th><th>IDENTIFICACIÓN</th><th>DOMICILIO</th><th>CONDICIÓN IVA</th><th /></>}</tr></thead><tbody>
-      {records.map((row) => <tr key={row.id}>{product ? <><td><b>{row.nombre}</b><small className="cell-sub">{row.descripcion || 'Electrodoméstico'}</small></td><td><span className={`stock-count ${Number(row.stock) <= 3 ? 'empty' : ''}`}>{row.stock} un.</span></td><td>{money(row.costo_unitario)}</td><td className="amount">{money(row.precio_venta)}</td></> : <><td><b>{row.razon_social}</b></td><td>{row.identificacion || row.cuit || '—'}</td><td>{row.domicilio || '—'}</td><td><span className="status-label">{row.condicion_iva?.replaceAll('_', ' ')}</span></td></>}
+      {records.map((row) => <tr key={row.id}>{product ? <><td><b>{row.nombre}</b><small className="cell-sub">{row.descripcion || 'Sistema digital'}</small></td><td><span className={`stock-count ${Number(row.stock) <= 3 ? 'empty' : ''}`}>{row.stock} un.</span></td><td>{money(row.costo_unitario)}</td><td className="amount">{money(row.precio_venta)}</td></> : <><td><b>{row.razon_social}</b></td><td>{row.identificacion || row.cuit || '—'}</td><td>{row.domicilio || '—'}</td><td><span className="status-label">{row.condicion_iva?.replaceAll('_', ' ')}</span></td></>}
         <td className="align-right"><button className="icon-button" title="Editar" onClick={() => onEdit(row)}><Pencil size={15} /></button><button className="icon-button danger-action" title="Desactivar" onClick={() => onDeactivate(row.id)}><X size={16} /></button></td></tr>)}
       {!records.length && <tr><td colSpan={party ? 5 : 5}><EmptyState label="Todavía no hay registros activos." /></td></tr>}
     </tbody></table></div>
@@ -346,9 +359,9 @@ function VatView({ data, filters, setFilters, onSettle, busy }) {
   </>
 }
 
-function OperationForm({ type, lookups, onSubmit, onCancel }) {
+function OperationForm({ type, lookups, createdParty, onAddParty, onSubmit, onCancel }) {
   const sale = type === 'ventas'
-  const [partyId, setPartyId] = useState('')
+  const [partyId, setPartyId] = useState(createdParty ? String(createdParty.id) : '')
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
   const [paymentRows, setPaymentRows] = useState([{ forma_pago_id: '', importe: '' }])
   const [fecha, setFecha] = useState(today)
@@ -387,7 +400,7 @@ function OperationForm({ type, lookups, onSubmit, onCancel }) {
   return <form className="operation-form" onSubmit={submit}>
     <div className="modal-heading"><div><div className="eyebrow">NUEVA OPERACIÓN</div><h2>{sale ? 'Registrar venta' : 'Registrar compra'}</h2></div><button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar"><X size={19} /></button></div>
     {error && <div className="notice error">{error}</div>}
-    <div className="form-grid"><label>{sale ? 'Cliente' : 'Proveedor'}<select required value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Seleccionar…</option>{partyList.map((row) => <option key={row.id} value={row.id}>{row.razon_social}</option>)}</select></label><label>Fecha<input required type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>{!sale && <label className="form-span">Número de factura del proveedor<input required value={numero} onChange={(event) => setNumero(event.target.value)} placeholder="0001-00001234" /></label>}</div>
+    <div className="form-grid"><div className="party-field"><label>{sale ? 'Cliente' : 'Proveedor'}<select required value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Seleccionar…</option>{partyList.map((row) => <option key={row.id} value={row.id}>{row.razon_social}</option>)}</select></label><button type="button" className="text-action" onClick={onAddParty}><Plus size={14} />Agregar {sale ? 'cliente' : 'proveedor'}</button></div><label>Fecha<input required type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>{!sale && <label className="form-span">Número de factura del proveedor<input required value={numero} onChange={(event) => setNumero(event.target.value)} placeholder="0001-00001234" /></label>}</div>
     <div className="form-section-head"><b>Productos</b><button type="button" className="text-action" onClick={() => setItems((old) => [...old, { producto_id: '', cantidad: 1, precio_unitario: '' }])}><Plus size={14} />Agregar línea</button></div>
     <div className="line-items">{items.map((item, index) => <div className="line-item" key={index}><select aria-label="Producto" required value={item.producto_id} onChange={(event) => setItem(index, 'producto_id', event.target.value)}><option value="">Producto…</option>{lookups.productos.map((product) => <option key={product.id} value={product.id}>{product.nombre} · {sale ? product.stock : 'stock ' + product.stock}</option>)}</select><input aria-label="Cantidad" required type="number" min="1" step="1" value={item.cantidad} onChange={(event) => setItem(index, 'cantidad', event.target.value)} />{!sale && <input aria-label="Precio unitario" required type="number" min="0" step="0.01" placeholder="Precio neto" value={item.precio_unitario} onChange={(event) => setItem(index, 'precio_unitario', event.target.value)} />}<b className="line-total">{money(priceFor(item) * Number(item.cantidad || 0))}</b>{items.length > 1 && <button type="button" className="icon-button danger-action" aria-label="Quitar producto" onClick={() => setItems((old) => old.filter((_, i) => i !== index))}><X size={15} /></button>}</div>)}</div>
     <div className="form-section-head"><b>Formas de pago</b><button type="button" className="text-action" onClick={() => setPaymentRows((old) => [...old, { forma_pago_id: '', importe: '' }])}><Plus size={14} />Dividir pago</button></div>

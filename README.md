@@ -1,4 +1,4 @@
-# TECNOHOGAR S.A. · Sistema contable académico
+# APEX SOFTWARE · Sistema contable
 
 Aplicación educativa para registrar compras y ventas, actualizar existencias y generar automáticamente el Libro Diario, CMV y liquidación mensual del IVA. No integra ARCA ni reemplaza un sistema contable de producción.
 
@@ -44,11 +44,11 @@ Los importes se guardan en `NUMERIC(14,2)`. Las FK preservan referencias histór
 
 Requisitos: Node.js 20.19+ y PostgreSQL 14+.
 
-1. Crear la base `tecnohogar` en PostgreSQL (por ejemplo, desde pgAdmin).
+1. Crear la base `apexsoftware` en PostgreSQL (por ejemplo, desde pgAdmin).
 2. Aplicar `database/schema.sql` desde la raíz del proyecto. En la instalación PostgreSQL 17 de Windows:
 
    ```powershell
-   & 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -U postgres -d tecnohogar -f database/schema.sql
+   & 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -U postgres -d apexsoftware -f database/schema.sql
    ```
 
 3. Copiar `backend/.env.example` a `backend/.env` y configurar `DATABASE_URL`, un `JWT_SECRET` aleatorio y una contraseña local para `ADMIN_PASSWORD`:
@@ -80,18 +80,18 @@ Requisitos: Node.js 20.19+ y PostgreSQL 14+.
 
    Abrir `http://localhost:5173`. Vite redirige `/api` al servidor de Express en el puerto 3000.
 
-Para probar los datos de muestra, aplicar luego desde la raíz: `& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -U postgres -d tecnohogar -f database/demo_setup.sql`. Sus identificadores CUIT/DNI `TEST-*` son marcadores académicos, no datos fiscales reales. Las contraseñas y `.env` no se incluyen en el repositorio.
+Para probar los datos de muestra, aplicar luego desde la raíz: `& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -U postgres -d apexsoftware -f database/demo_setup.sql`. Sus identificadores CUIT/DNI `TEST-*` son marcadores de prueba, no datos reales. Las contraseñas y `.env` no se incluyen en el repositorio.
 
 ## Casos de prueba
 
-Con los datos demo cargados, las cafeteras cuestan $35.000 y se venden a $56.000; las licuadoras cuestan $50.000 y se venden a $70.000; las aspiradoras cuestan $100.000 y se venden a $126.000; las tostadoras cuestan $35.000 y se venden a $42.000. El stock inicial es 100 unidades por producto.
+Con los datos demo cargados, la pagina e-commerce cuesta $5.000.000 y se vende a $6.000.000; la pagina noticias cuesta $10.000.000 y se vende a $1.075.000; la pagina educativa cuesta $800.000 y se vende a $900.000; la pagina red social cuesta $2.000.000 y se vende a $2.300.000. Cada descripcion incluye el servicio de mantenimiento mensual indicado en la imagen. El stock inicial es 100 unidades por sistema.
 
 | Caso | Operación | Resultado contable esperado |
 | --- | --- | --- |
-| 1 | 05/09, ELECTRO SUR: 4 cafeteras, 3 licuadoras y 2 aspiradoras; dividir total en efectivo y pagaré | Factura A; neto $686.000; IVA $144.060; total $830.060; CMV $490.000. |
-| 2 | 10/09, Martín López: 2 cafeteras y 2 tostadoras; efectivo | Factura B; neto $196.000; IVA $41.160; total $237.160; CMV $140.000. |
-| 3 | 15/09, DISTRIBUIDORA CENTRAL: 15 cafeteras, 10 licuadoras y 8 aspiradoras | Neto $1.985.000; IVA crédito $416.850; total $2.401.850. Dividir 50% banco y 50% cuenta corriente. |
-| 4 | 20/09, EQUIPAMIENTOS DEL SUR: 10 tostadoras y 10 cafeteras | Neto $760.000; IVA crédito $159.600; total $919.600; cuenta corriente. |
+| 1 | 05/09, ELECTRO SUR: 4 desarrollos, 3 personalizaciones y 2 mantenimientos; dividir total en efectivo y pagaré | Factura A; neto $686.000; IVA $144.060; total $830.060; costo $490.000. |
+| 2 | 10/09, Martín López: 2 desarrollos y 2 paquetes de infraestructura; efectivo | Factura B; neto $196.000; IVA $41.160; total $237.160; costo $140.000. |
+| 3 | 15/09, DISTRIBUIDORA CENTRAL: 15 desarrollos, 10 personalizaciones y 8 mantenimientos | Neto $1.985.000; IVA crédito $416.850; total $2.401.850. Dividir 50% banco y 50% cuenta corriente. |
+| 4 | 20/09, EQUIPAMIENTOS DEL SUR: 10 paquetes de infraestructura y 10 desarrollos | Neto $760.000; IVA crédito $159.600; total $919.600; cuenta corriente. |
 
 La liquidación de septiembre debe informar IVA Débito $185.220, IVA Crédito $576.450 y saldo a favor de $391.230. Las ventas no permiten superar el stock disponible.
 
