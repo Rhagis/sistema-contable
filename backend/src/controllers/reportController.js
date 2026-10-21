@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js'
 import { pool } from '../config/db.js'
 import { httpError } from '../middleware/errors.js'
-import { createJournal, getAccountIds } from '../services/accountingService.js'
+import { createJournal, getAccountIds, listAccounts } from '../services/accountingService.js'
 import { withTransaction } from '../services/transactionService.js'
 
 const validPeriod = (mes, anio) => Number.isInteger(mes) && mes >= 1 && mes <= 12
@@ -173,10 +173,7 @@ export async function dashboard(request, response, next) {
 // Catalogos auxiliares que la interfaz usa para formularios y movimientos contables.
 export async function accounts(request, response, next) {
   try {
-    const { rows } = await pool.query(
-      'SELECT id, codigo, nombre, tipo FROM cuentas_contables WHERE activo = TRUE ORDER BY codigo',
-    )
-    response.json(rows)
+    response.json(await listAccounts(pool))
   } catch (error) {
     next(error)
   }

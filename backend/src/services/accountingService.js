@@ -1,10 +1,29 @@
 import Decimal from 'decimal.js'
 import { httpError } from '../middleware/errors.js'
 
-// Resuelve codigos estables del plan contable a ids para construir lineas de asiento.
+// Consulta el plan mediante las tablas de clasificación que sincroniza demo_setup.sql.
+export async function listAccounts(client) {
+  const { rows } = await client.query(
+    `SELECT id, codigo, nombre, tipo
+     FROM (
+       SELECT cuenta_id AS id, codigo, nombre, 'ACTIVO'::VARCHAR(30) AS tipo, activo FROM cuentas_activo
+       UNION ALL
+       SELECT cuenta_id AS id, codigo, nombre, 'PASIVO'::VARCHAR(30) AS tipo, activo FROM cuentas_pasivo
+       UNION ALL
+       SELECT cuenta_id AS id, codigo, nombre, 'PATRIMONIO_NETO'::VARCHAR(30) AS tipo, activo FROM cuentas_patrimonio_neto
+       UNION ALL
+       SELECT cuenta_id AS id, codigo, nombre, tipo, activo FROM cuentas_resultados
+     ) cuentas
+     WHERE activo = TRUE
+     ORDER BY codigo`,
+  )
+  return rows
+}
+
+// Resuelve códigos estables del plan contable a IDs para construir líneas de asiento.
 export async function getAccountIds(client) {
-  const { rows } = await client.query('SELECT id, codigo FROM cuentas_contables WHERE activo = TRUE')
-  return Object.fromEntries(rows.map(({ codigo, id }) => [codigo, id]))
+  const accounts = await listAccounts(client)
+  return Object.fromEntries(accounts.map(({ codigo, id }) => [codigo, id]))
 }
 
 // Verifica partida doble antes de escribir cabecera y lineas dentro de la misma transaccion.

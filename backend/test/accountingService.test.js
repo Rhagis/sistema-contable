@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import Decimal from 'decimal.js'
-import { createJournal } from '../src/services/accountingService.js'
+import { createJournal, getAccountIds } from '../src/services/accountingService.js'
 
-function fakeClient() {
+function fakeClient(accountRows = []) {
   // Registra SQL sin conectarse a PostgreSQL y simula el id devuelto al insertar un asiento.
   const queries = []
   return {
@@ -11,10 +11,24 @@ function fakeClient() {
     async query(sql, values) {
       queries.push({ sql, values })
       if (sql.includes('INSERT INTO asientos')) return { rows: [{ id: 42 }] }
+      if (sql.includes('FROM cuentas_activo')) return { rows: accountRows }
       return { rows: [] }
     },
   }
 }
+
+test('resuelve las cuentas desde las tablas de clasificación del plan contable', async () => {
+  const client = fakeClient([
+    { id: 1, codigo: '1.1.01', nombre: 'Caja', tipo: 'ACTIVO' },
+    { id: 2, codigo: '4.1.01', nombre: 'Ventas', tipo: 'RESULTADO_POSITIVO' },
+  ])
+
+  assert.deepEqual(await getAccountIds(client), { '1.1.01': 1, '4.1.01': 2 })
+  for (const table of ['cuentas_activo', 'cuentas_pasivo', 'cuentas_patrimonio_neto', 'cuentas_resultados']) {
+    assert.match(client.queries[0].sql, new RegExp(`FROM ${table}`))
+  }
+  assert.match(client.queries[0].sql, /WHERE activo = TRUE/)
+})
 
 // Verifica que se persisten lineas efectivas y se conservan los importes con centavos.
 test('guarda un asiento balanceado y omite líneas de importe cero', async () => {
