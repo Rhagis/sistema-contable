@@ -75,6 +75,24 @@ INSERT INTO cuentas_contables (codigo, nombre, tipo) VALUES
     ('5.2.12', 'Publicidad Perdida', 'RESULTADO_NEGATIVO')
 ON CONFLICT DO NOTHING;
 
+-- Actualizar las cuentas de los cheques en instalaciones que ya tenian estos medios de pago.
+UPDATE formas_pago fp
+SET nombre = 'Cheque',
+    cuenta_venta_id = recibido.id,
+    cuenta_compra_id = emitido.id
+FROM cuentas_contables recibido, cuentas_contables emitido
+WHERE fp.codigo = 'CHEQUE_PROPIO'
+  AND recibido.codigo = '1.1.09'
+  AND emitido.codigo = '1.1.02';
+
+UPDATE formas_pago fp
+SET cuenta_venta_id = recibido.id,
+    cuenta_compra_id = emitido.id
+FROM cuentas_contables recibido, cuentas_contables emitido
+WHERE fp.codigo = 'CHEQUE_DIFERIDO'
+  AND recibido.codigo = '1.1.10'
+  AND emitido.codigo = '2.1.06';
+
 -- 3. Una funcion sincroniza las cuatro tablas cuando cambia la matriz.
 CREATE OR REPLACE FUNCTION sincronizar_clasificacion_cuenta()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$

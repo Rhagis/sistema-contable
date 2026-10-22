@@ -23,7 +23,10 @@ export function errorHandler(error, request, response, next) {
   }
 
   console.error(error)
-  return response.status(500).json({ message: 'Ocurrió un error interno.' })
+  const message = process.env.NODE_ENV === 'production'
+    ? 'Ocurrió un error interno.'
+    : error.message || 'Ocurrió un error interno.'
+  return response.status(500).json({ message })
 }
 
 // Crea errores que pueden viajar desde servicios hasta el middleware HTTP sin perder su estado.

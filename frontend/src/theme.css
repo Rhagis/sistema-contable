@@ -14,3 +14,4 @@
 .party-field{display:grid;gap:6px}.party-field label{display:grid;gap:6px;color:#65756a;font-size:10px;font-weight:600}.party-field .text-action{justify-self:start}
 .apex-logo-login{position:relative;z-index:1;width:min(270px,72%);height:auto;margin-bottom:34px}.apex-logo-sidebar{width:132px;height:auto;padding:5px 8px;border-radius:5px;background:#fff}.brand-lockup{justify-content:center}.login-brand,.sidebar{background:#202b43}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+.free-line-details{grid-column:1/-1;display:grid;gap:7px;min-width:0}

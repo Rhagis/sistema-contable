@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { addPurchase, addSale, invoicePdf, listOperations } from '../controllers/operationController.js'
+import { addPurchase, addSale, editSale, invoicePdf, listOperations } from '../controllers/operationController.js'
 import { accounts, dashboard, journal, ledger, paymentMethods, settleVat, vatSummary } from '../controllers/reportController.js'
 import { requireAuth } from '../middleware/auth.js'
 import { settlementHandlers } from '../controllers/settlementController.js'
@@ -15,6 +15,7 @@ router.get('/dashboard', dashboard)
 router.get('/cuentas', accounts)
 router.get('/formas-pago', paymentMethods)
 router.post('/ventas', addSale)
+router.put('/ventas/:id', editSale)
 // Fija el tipo antes de reutilizar el controlador generico de lista y detalle.
 router.get('/ventas', (request, response, next) => {
   request.params.type = 'ventas'

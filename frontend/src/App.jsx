@@ -44,6 +44,7 @@ function App() {
   const [settleRow, setSettleRow] = useState(null)
   const [partyModalType, setPartyModalType] = useState(null)
   const [createdParty, setCreatedParty] = useState(null)
+  const [editingSale, setEditingSale] = useState(null)
   const [editingRecord, setEditingRecord] = useState(null)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [filters, setFilters] = useState({ mes: currentMonth, anio: currentYear, desde: '', hasta: '', tipo: '' })
@@ -119,6 +120,7 @@ function App() {
     setModal(false)
     setPartyModalType(null)
     setCreatedParty(null)
+    setEditingSale(null)
     setEditingRecord(null)
   }
 
@@ -133,12 +135,35 @@ function App() {
   }
 
   // Publica una venta o compra; el API valida y registra la operacion dentro de una transaccion.
-  async function submitOperation(payload) {
+  async function editSale(id) {
+    try {
+      const { data: operation } = await api.get(`/ventas/${id}`)
+      setCreatedParty(null)
+      setEditingSale(operation)
+      setModal(true)
+    } catch (error) {
+      setNotice(errorMessage(error))
+    }
+  }
+
+  async function submitOperation(payload, id) {
     const path = section === 'ventas' ? '/ventas' : '/compras'
-    const { data: response } = await api.post(path, payload)
+    const { data: response } = id
+      ? await api.put(`${path}/${id}`, payload)
+      : await api.post(path, payload)
     setModal(false)
-    setNotice(`${section === 'ventas' ? 'Venta' : 'Compra'} registrada. Comprobante ${response.numero_comprobante}.`)
-    setSection('dashboard')
+    setEditingSale(null)
+    if (id) {
+      setNotice(`Venta actualizada. Comprobante ${response.numero_comprobante}.`)
+      try {
+        setData((await api.get('/ventas')).data)
+      } catch (error) {
+        setNotice(`Venta actualizada. No se pudo refrescar la lista: ${errorMessage(error)}`)
+      }
+    } else {
+      setNotice(`${section === 'ventas' ? 'Venta' : 'Compra'} registrada. Comprobante ${response.numero_comprobante}.`)
+      setSection('dashboard')
+    }
   }
 
   // Registra el cobro/pago y recarga la lista de saldos y movimientos.
@@ -266,7 +291,7 @@ function App() {
           {notice && <div className={`notice ${notice.includes('registrad') || notice.includes('correctamente') ? 'success' : ''}`} role="status">{notice}<button aria-label="Cerrar aviso" onClick={() => setNotice('')}><X size={16} /></button></div>}
           {busy && <div className="loading-line" />}
           {section === 'dashboard' && <Dashboard data={data} navigate={navigate} />}
-          {section === 'ventas' && <OperationList type="ventas" rows={data} onCreate={() => setModal(true)} onView={viewInvoice} />}
+          {section === 'ventas' && <OperationList type="ventas" rows={data} onCreate={() => { setEditingSale(null); setModal(true) }} onView={viewInvoice} onEdit={editSale} />}
           {section === 'compras' && <OperationList type="compras" rows={data} onCreate={() => setModal(true)} onView={viewInvoice} />}
           {['cobros', 'pagos'].includes(section) && <SettlementList type={section} data={data} onSettle={setSettleRow} />}
           {['productos', 'clientes', 'proveedores'].includes(section) && <CatalogList type={section} rows={data} onCreate={() => { setEditingRecord(null); setModal(true) }} onEdit={(record) => { setEditingRecord(record); setModal(true) }} onDeactivate={deactivate} />}
@@ -277,9 +302,9 @@ function App() {
         </div>
       </main>
 
-      {modal && <Modal onClose={() => { setModal(false); setPartyModalType(null) }}>
+      {modal && <Modal onClose={() => { setModal(false); setPartyModalType(null); setEditingSale(null) }}>
         {['ventas', 'compras'].includes(section)
-          ? <OperationForm key={createdParty?.id || 'new-operation'} type={section} lookups={lookups} createdParty={createdParty} onAddParty={() => { setCreatedParty(null); setPartyModalType(section === 'ventas' ? 'clientes' : 'proveedores') }} onSubmit={submitOperation} onCancel={() => { setModal(false); setPartyModalType(null) }} />
+          ? <OperationForm key={editingSale?.id || createdParty?.id || 'new-operation'} type={section} lookups={lookups} createdParty={createdParty} initialRecord={editingSale} onAddParty={() => { setCreatedParty(null); setPartyModalType(section === 'ventas' ? 'clientes' : 'proveedores') }} onSubmit={submitOperation} onCancel={() => { setModal(false); setPartyModalType(null); setEditingSale(null) }} />
           : <CatalogForm type={section} initialRecord={editingRecord} onSubmit={submitCatalog} onCancel={() => setModal(false)} />}
       </Modal>}
       {invoice && <Modal onClose={() => setInvoice(null)}><InvoiceView invoice={invoice} onClose={() => setInvoice(null)} /></Modal>}
@@ -335,7 +360,7 @@ function Metric({ label, value, icon: Icon, tone, hint }) {
 }
 
 // Lista comprobantes y totales para ventas o compras, usando la misma tabla para ambos ciclos.
-function OperationList({ type, rows, onCreate, onView }) {
+function OperationList({ type, rows, onCreate, onView, onEdit }) {
   const sale = type === 'ventas'
   const operations = Array.isArray(rows) ? rows : []
   return <>
@@ -343,7 +368,7 @@ function OperationList({ type, rows, onCreate, onView }) {
       action={<button className="button primary" onClick={onCreate}><Plus size={17} />{sale ? 'Nueva venta' : 'Nueva compra'}</button>} />
     <div className="table-toolbar"><div className="table-count">{operations.length} operaciones</div></div>
     <div className="table-wrap"><table><thead><tr><th>COMPROBANTE</th><th>{sale ? 'CLIENTE' : 'PROVEEDOR'}</th><th>FECHA</th><th>NETO</th><th>IVA</th><th className="align-right">TOTAL</th><th></th></tr></thead><tbody>
-      {operations.map((row) => <tr key={row.id}><td><span className="doc-code">{row.tipo_comprobante?.replace('_', ' ')}</span><b>{row.numero_comprobante}</b></td><td>{row.contraparte}</td><td>{dateLabel(row.fecha)}</td><td>{money(row.neto)}</td><td>{money(row.iva)}</td><td className="align-right amount">{money(row.total)}</td><td><button className="text-action" onClick={() => onView(row.id)}>Ver factura</button></td></tr>)}
+      {operations.map((row) => <tr key={row.id}><td><span className="doc-code">{row.tipo_comprobante?.replace('_', ' ')}</span><b>{row.numero_comprobante}</b></td><td>{row.contraparte}</td><td>{dateLabel(row.fecha)}</td><td>{money(row.neto)}</td><td>{money(row.iva)}</td><td className="align-right amount">{money(row.total)}</td><td>{sale && <button className="icon-button" title="Editar venta" onClick={() => onEdit(row.id)}><Pencil size={15} /></button>}<button className="text-action" onClick={() => onView(row.id)}>Ver factura</button></td></tr>)}
       {!operations.length && <tr><td colSpan="7"><EmptyState label="No hay operaciones para mostrar." /></td></tr>}
     </tbody></table></div>
   </>
@@ -446,15 +471,27 @@ function VatView({ data, filters, setFilters, onSettle, busy }) {
 }
 
 // Construye el payload de venta/compra; los importes mostrados son una vista previa y el servidor recalcula.
-function OperationForm({ type, lookups, createdParty, onAddParty, onSubmit, onCancel }) {
+function OperationForm({ type, lookups, createdParty, initialRecord, onAddParty, onSubmit, onCancel }) {
   const sale = type === 'ventas'
-  const [partyId, setPartyId] = useState(createdParty ? String(createdParty.id) : '')
-  const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
-  const [paymentRows, setPaymentRows] = useState([{ forma_pago_id: '', importe: '' }])
-  const [fecha, setFecha] = useState(today)
+  const [partyId, setPartyId] = useState(String(createdParty?.id ?? initialRecord?.cliente_id ?? ''))
+  const [items, setItems] = useState(initialRecord
+    ? initialRecord.detalle.map((line) => ({
+      producto_id: String(line.producto_id),
+      cantidad: Number(line.cantidad),
+      precio_unitario: String(line.precio_unitario),
+    }))
+    : [{ producto_id: '', cantidad: 1, precio_unitario: '' }])
+  const [paymentRows, setPaymentRows] = useState(initialRecord
+    ? initialRecord.pagos.map((payment) => ({
+      forma_pago_id: String(payment.forma_pago_id),
+      importe: String(payment.importe),
+      recargo_porcentaje: String(payment.recargo_porcentaje || 0),
+    }))
+    : [{ forma_pago_id: '', importe: '' }])
+  const [fecha, setFecha] = useState(initialRecord?.fecha?.slice(0, 10) || today)
   const [numero, setNumero] = useState('')
   const [tipo, setTipo] = useState('FACTURA_A')
-  const [monotributista, setMonotributista] = useState(false)
+  const [monotributista, setMonotributista] = useState(initialRecord?.tipo_comprobante === 'FACTURA_C')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const priceFor = (item) => {
@@ -464,7 +501,7 @@ function OperationForm({ type, lookups, createdParty, onAddParty, onSubmit, onCa
   }
   // La interfaz anticipa el total para orientar el pago; la validacion definitiva ocurre en el backend.
   const net = items.reduce((total, item) => total + Math.round(priceFor(item) * Number(item.cantidad || 0) * 100) / 100, 0)
-  const tax = !sale && tipo === 'FACTURA_B' ? 0 : Math.round(net * 0.21 * 100) / 100
+  const tax = (sale && monotributista) || (!sale && tipo === 'FACTURA_B') ? 0 : Math.round(net * 0.21 * 100) / 100
   const total = net + tax
   const setItem = (index, key, value) => setItems((old) => old.map((item, i) => i === index ? { ...item, [key]: value } : item))
   const setPayment = (index, key, value) => setPaymentRows((old) => old.map((item, i) => i === index ? { ...item, [key]: value } : item))
@@ -476,30 +513,38 @@ function OperationForm({ type, lookups, createdParty, onAddParty, onSubmit, onCa
     setSaving(true)
     const payments = paymentRows.map((row, index) => ({
       forma_pago_id: Number(row.forma_pago_id),
-      importe: Number(row.importe || (paymentRows.length === 1 && index === 0 ? total : 0)),
+      importe: Number(initialRecord && paymentRows.length === 1
+        ? total
+        : row.importe || (paymentRows.length === 1 && index === 0 ? total : 0)),
       recargo_porcentaje: Number(row.recargo_porcentaje || 0),
     }))
     const payload = {
       ...(sale ? { cliente_id: Number(partyId), emisor_monotributista: monotributista } : { proveedor_id: Number(partyId), numero_comprobante: numero, tipo_comprobante: tipo }),
       fecha,
       items: items.map((item) => item.libre
-        ? { descripcion: item.descripcion.trim(), cantidad: Number(item.cantidad), precio_unitario: Number(item.precio_unitario) }
+        ? { descripcion: item.descripcion.trim(), cantidad: Number(item.cantidad), precio_unitario: Number(item.precio_unitario), ...(!sale ? { cuenta_codigo: item.cuenta_codigo || '5.2.01' } : {}) }
         : { producto_id: Number(item.producto_id), cantidad: Number(item.cantidad),
           ...(!sale || item.precio_unitario !== '' ? { precio_unitario: Number(item.precio_unitario || priceFor(item)) } : {}) }),
       pagos: payments,
     }
-    try { await onSubmit(payload) } catch (requestError) { setError(errorMessage(requestError)) } finally { setSaving(false) }
+    try { await onSubmit(payload, initialRecord?.id) } catch (requestError) { setError(errorMessage(requestError)) } finally { setSaving(false) }
   }
 
   const partyList = sale ? lookups.clientes : lookups.proveedores
   return <form className="operation-form" onSubmit={submit}>
-    <div className="modal-heading"><div><div className="eyebrow">NUEVA OPERACIÓN</div><h2>{sale ? 'Registrar venta' : 'Registrar compra'}</h2></div><button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar"><X size={19} /></button></div>
+    <div className="modal-heading"><div><div className="eyebrow">{initialRecord ? 'EDICIÓN INTERNA DE VENTA' : 'NUEVA OPERACIÓN'}</div><h2>{initialRecord ? `Editar venta ${initialRecord.numero_comprobante}` : sale ? 'Registrar venta' : 'Registrar compra'}</h2></div><button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar"><X size={19} /></button></div>
+    {initialRecord && <div className="notice">Se conservará el número del comprobante. Si ya fue emitido fuera del sistema, gestioná allí la corrección fiscal correspondiente.</div>}
     {error && <div className="notice error">{error}</div>}
-    <div className="form-grid"><div className="party-field"><label>{sale ? 'Cliente' : 'Proveedor'}<select required value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Seleccionar…</option>{partyList.map((row) => <option key={row.id} value={row.id}>{row.razon_social}</option>)}</select></label><button type="button" className="text-action" onClick={onAddParty}><Plus size={14} />Agregar {sale ? 'cliente' : 'proveedor'}</button></div><label>Fecha<input required type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>{sale && <label className="check-field"><span>Facturación</span><span><input type="checkbox" checked={monotributista} onChange={(event) => setMonotributista(event.target.checked)} /> Monotributista (Factura C)</span></label>}{!sale && <><label>Tipo de factura<select value={tipo} onChange={(event) => setTipo(event.target.value)}><option value="FACTURA_A">Factura A (discrimina IVA)</option><option value="FACTURA_B">Factura B (sin crédito fiscal)</option></select></label><label>Número de factura del proveedor<input required value={numero} onChange={(event) => setNumero(event.target.value)} placeholder="0001-00001234" /></label></>}</div>    <div className="form-section-head"><b>Productos</b><span><button type="button" className="text-action" onClick={() => setItems((old) => [...old, { producto_id: '', cantidad: 1, precio_unitario: '' }])}><Plus size={14} />Agregar línea</button>{!sale && <button type="button" className="text-action" onClick={() => setItems((old) => [...old, { libre: true, descripcion: '', cantidad: 1, precio_unitario: '' }])}><Plus size={14} />Producto no catalogado</button>}</span></div>
-    <div className="line-items">{items.map((item, index) => <div className="line-item" key={index}>{item.libre ? <input aria-label="Descripción" required maxLength={180} placeholder="Nombre del producto o servicio" value={item.descripcion} onChange={(event) => setItem(index, 'descripcion', event.target.value)} /> : <select aria-label="Producto" required value={item.producto_id} onChange={(event) => setItem(index, 'producto_id', event.target.value)}><option value="">Producto…</option>{lookups.productos.map((product) => <option key={product.id} value={product.id}>{product.nombre} · {sale ? product.stock : 'stock ' + product.stock}</option>)}</select>}<input aria-label="Cantidad" required type="number" min="1" step="1" value={item.cantidad} onChange={(event) => setItem(index, 'cantidad', event.target.value)} />{!sale && <input aria-label="Precio unitario" required type="number" min="0" step="0.01" placeholder="Precio neto" value={item.precio_unitario} onChange={(event) => setItem(index, 'precio_unitario', event.target.value)} />}<b className="line-total">{money(priceFor(item) * Number(item.cantidad || 0))}</b>{items.length > 1 && <button type="button" className="icon-button danger-action" aria-label="Quitar producto" onClick={() => setItems((old) => old.filter((_, i) => i !== index))}><X size={15} /></button>}</div>)}</div>
+    <div className="form-grid"><div className="party-field"><label>{sale ? 'Cliente' : 'Proveedor'}<select required value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Seleccionar…</option>{partyList.map((row) => <option key={row.id} value={row.id}>{row.razon_social}</option>)}</select></label><button type="button" className="text-action" onClick={onAddParty}><Plus size={14} />Agregar {sale ? 'cliente' : 'proveedor'}</button></div><label>Fecha<input required type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>{sale && <label className="check-field"><span>Facturación</span><span><input type="checkbox" checked={monotributista} onChange={(event) => setMonotributista(event.target.checked)} /> Monotributista (Factura C)</span></label>}{!sale && <><label>Tipo de factura<select value={tipo} onChange={(event) => setTipo(event.target.value)}><option value="FACTURA_A">Factura A (discrimina IVA)</option><option value="FACTURA_B">Factura B (sin crédito fiscal)</option></select></label><label>Número de factura del proveedor<input required value={numero} onChange={(event) => setNumero(event.target.value)} placeholder="0001-00001234" /></label></>}</div>        <div className="form-section-head"><b>{sale ? 'Productos' : 'Productos y gastos'}</b><span><button type="button" className="text-action" onClick={() => setItems((old) => [...old, { producto_id: '', cantidad: 1, precio_unitario: '' }])}><Plus size={14} />Agregar línea</button>{!sale && <button type="button" className="text-action" onClick={() => setItems((old) => [...old, { libre: true, descripcion: '', cantidad: 1, precio_unitario: '', cuenta_codigo: '5.2.01' }])}><Plus size={14} />Producto no catalogado</button>}</span></div>
+    <div className="line-items">{items.map((item, index) => <div className={`line-item${item.libre ? ' free-line' : ''}`} key={index}>{item.libre ? <div className="free-line-details"><input aria-label="Descripción" required maxLength={180} placeholder="Nombre del producto o servicio" value={item.descripcion} onChange={(event) => setItem(index, 'descripcion', event.target.value)} />{!sale && <select className="line-account" aria-label="Cuenta contable" required value={item.cuenta_codigo || '5.2.01'} onChange={(event) => setItem(index, 'cuenta_codigo', event.target.value)}><optgroup label="Activos">{[['1.2.01', 'Rodados'], ['1.2.02', 'Muebles y Útiles'], ['1.2.03', 'Instalaciones'], ['1.2.04', 'Inmuebles'], ['1.2.05', 'Maquinarias'], ['1.2.06', 'Materias Primas'], ['1.2.07', 'Equipos de Computación']].map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</optgroup><optgroup label="Gastos">{[['5.2.01', 'Gastos y Servicios Varios'], ['5.2.03', 'Alquileres Perdidos'], ['5.2.04', 'Sueldos y Jornales'], ['5.2.05', 'Fletes y Acarreos'], ['5.2.06', 'Descuentos Cedidos'], ['5.2.07', 'Seguros'], ['5.2.08', 'Impuestos'], ['5.2.09', 'Intereses Perdidos'], ['5.2.10', 'Gastos Generales'], ['5.2.11', 'Comisiones Perdidas'], ['5.2.12', 'Publicidad Perdida']].map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</optgroup></select>}</div> : <select aria-label="Producto" required value={item.producto_id} onChange={(event) => setItem(index, 'producto_id', event.target.value)}><option value="">Producto…</option>{lookups.productos.map((product) => <option key={product.id} value={product.id}>{product.nombre}{!sale && ` · stock ${product.stock}`}</option>)}</select>}<input aria-label="Cantidad" required type="number" min="1" step="1" value={item.cantidad} onChange={(event) => setItem(index, 'cantidad', event.target.value)} />{(!sale || initialRecord) && <input aria-label="Precio unitario" required type="number" min="0" step="0.01" placeholder={sale ? 'Precio de venta' : 'Precio neto'} value={item.precio_unitario} onChange={(event) => setItem(index, 'precio_unitario', event.target.value)} />}<b className="line-total">{money(priceFor(item) * Number(item.cantidad || 0))}</b>{items.length > 1 && <button type="button" className="icon-button danger-action" aria-label="Quitar producto" onClick={() => setItems((old) => old.filter((_, i) => i !== index))}><X size={15} /></button>}</div>)}</div>
     <div className="form-section-head"><b>Formas de pago</b><button type="button" className="text-action" onClick={() => setPaymentRows((old) => [...old, { forma_pago_id: '', importe: '' }])}><Plus size={14} />Dividir pago</button></div>
-    <div className="payment-list">{paymentRows.map((payment, index) => <div className="payment-row" key={index}><select required value={payment.forma_pago_id} onChange={(event) => setPayment(index, 'forma_pago_id', event.target.value)}><option value="">Forma de pago…</option>{lookups.formas.map((row) => <option key={row.id} value={row.id}>{row.nombre}</option>)}</select><input required type="number" min="0.01" step="0.01" placeholder="Importe" value={payment.importe || (paymentRows.length === 1 && total ? total.toFixed(2) : '')} onChange={(event) => setPayment(index, 'importe', event.target.value)} /><input type="number" min="0" max="1000" step="0.01" placeholder="Recargo %" title="Recargo porcentual de esta forma de pago" value={payment.recargo_porcentaje ?? ''} onChange={(event) => setPayment(index, 'recargo_porcentaje', event.target.value)} />{paymentRows.length > 1 && <button type="button" className="icon-button danger-action" aria-label="Quitar pago" onClick={() => setPaymentRows((old) => old.filter((_, i) => i !== index))}><X size={15} /></button>}{Number(payment.recargo_porcentaje) > 0 && <small className="cell-sub">Se cobra/paga {money(Math.round(Number(payment.importe || (paymentRows.length === 1 ? total : 0)) * (1 + Number(payment.recargo_porcentaje) / 100) * 100) / 100)}</small>}</div>)}</div>
-    <div className="totals-block"><div><span>Neto</span><b>{money(net)}</b></div><div><span>{(!sale && tipo === 'FACTURA_B') ? 'IVA (no discriminado)' : 'IVA 21%'}</span><b>{money(tax)}</b></div><div className="grand-total"><span>Total</span><strong>{money(total)}</strong></div></div>
+    <div className="payment-list">{paymentRows.map((payment, index) => {
+      const paymentAmount = initialRecord && paymentRows.length === 1
+        ? total
+        : Number(payment.importe || (paymentRows.length === 1 ? total : 0))
+      return <div className="payment-row" key={index}><select required value={payment.forma_pago_id} onChange={(event) => setPayment(index, 'forma_pago_id', event.target.value)}><option value="">Forma de pago…</option>{lookups.formas.map((row) => <option key={row.id} value={row.id}>{row.codigo === 'CHEQUE_PROPIO' ? sale ? 'Cheque de terceros (a depositar)' : 'Cheque propio' : row.nombre}</option>)}</select><input required type="number" min="0.01" step="0.01" placeholder="Importe" value={initialRecord && paymentRows.length === 1 ? total.toFixed(2) : payment.importe || (paymentRows.length === 1 && total ? total.toFixed(2) : '')} onChange={(event) => setPayment(index, 'importe', event.target.value)} /><input type="number" min="0" max="1000" step="0.01" placeholder="Recargo %" title="Recargo porcentual de esta forma de pago" value={payment.recargo_porcentaje ?? ''} onChange={(event) => setPayment(index, 'recargo_porcentaje', event.target.value)} />{paymentRows.length > 1 && <button type="button" className="icon-button danger-action" aria-label="Quitar pago" onClick={() => setPaymentRows((old) => old.filter((_, i) => i !== index))}><X size={15} /></button>}{Number(payment.recargo_porcentaje) > 0 && <small className="cell-sub">Se cobra/paga {money(Math.round(paymentAmount * (1 + Number(payment.recargo_porcentaje) / 100) * 100) / 100)}</small>}</div>
+    })}</div>
+    <div className="totals-block"><div><span>Neto</span><b>{money(net)}</b></div><div><span>{sale && monotributista ? 'IVA (Factura C)' : !sale && tipo === 'FACTURA_B' ? 'IVA (no discriminado)' : 'IVA 21%'}</span><b>{money(tax)}</b></div><div className="grand-total"><span>Total</span><strong>{money(total)}</strong></div></div>
     <div className="modal-actions"><button type="button" className="button secondary" onClick={onCancel}>Cancelar</button><button className="button primary" disabled={saving}>{saving ? 'Guardando…' : sale ? 'Registrar venta' : 'Registrar compra'}<ArrowUpRight size={16} /></button></div>
   </form>
 }
@@ -576,7 +621,7 @@ function SettlementForm({ type, row, methods, onSubmit, onCancel }) {
     <div className="form-grid">
       <label>Fecha<input name="fecha" type="date" defaultValue={today} required /></label>
       <label>Importe (pendiente {money(row.pendiente)})<input name="importe" type="number" min="0.01" max={row.pendiente} step="0.01" defaultValue={row.pendiente} required /></label>
-      <label className="form-span">{cobro ? 'Medio de cobro' : 'Medio de pago'}<select name="forma_pago_id" required defaultValue=""><option value="">Seleccionar…</option>{immediate.map((method) => <option key={method.id} value={method.id}>{method.nombre}</option>)}</select></label>
+      <label className="form-span">{cobro ? 'Medio de cobro' : 'Medio de pago'}<select name="forma_pago_id" required defaultValue=""><option value="">Seleccionar…</option>{immediate.map((method) => <option key={method.id} value={method.id}>{method.codigo === 'CHEQUE_PROPIO' ? cobro ? 'Cheque recibido (a depositar)' : 'Cheque propio' : method.nombre}</option>)}</select></label>
       <label className="form-span">Observaciones<input name="observaciones" maxLength={240} /></label>
     </div>
     <div className="modal-actions"><button type="button" className="button secondary" onClick={onCancel}>Cancelar</button><button className="button primary" disabled={saving}>{saving ? 'Guardando…' : cobro ? 'Registrar cobro' : 'Registrar pago'}<Check size={16} /></button></div>

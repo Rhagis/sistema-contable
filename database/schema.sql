@@ -59,6 +59,70 @@ CREATE TABLE cuentas_contables (
     activo BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+CREATE TABLE cuentas_activo (
+    cuenta_id BIGINT PRIMARY KEY REFERENCES cuentas_contables(id) ON DELETE CASCADE,
+    codigo VARCHAR(20) NOT NULL UNIQUE,
+    nombre VARCHAR(120) NOT NULL,
+    activo BOOLEAN NOT NULL
+);
+
+CREATE TABLE cuentas_pasivo (
+    cuenta_id BIGINT PRIMARY KEY REFERENCES cuentas_contables(id) ON DELETE CASCADE,
+    codigo VARCHAR(20) NOT NULL UNIQUE,
+    nombre VARCHAR(120) NOT NULL,
+    activo BOOLEAN NOT NULL
+);
+
+CREATE TABLE cuentas_patrimonio_neto (
+    cuenta_id BIGINT PRIMARY KEY REFERENCES cuentas_contables(id) ON DELETE CASCADE,
+    codigo VARCHAR(20) NOT NULL UNIQUE,
+    nombre VARCHAR(120) NOT NULL,
+    activo BOOLEAN NOT NULL
+);
+
+CREATE TABLE cuentas_resultados (
+    cuenta_id BIGINT PRIMARY KEY REFERENCES cuentas_contables(id) ON DELETE CASCADE,
+    codigo VARCHAR(20) NOT NULL UNIQUE,
+    nombre VARCHAR(120) NOT NULL,
+    tipo VARCHAR(30) NOT NULL CHECK (tipo IN ('RESULTADO_POSITIVO', 'RESULTADO_NEGATIVO')),
+    activo BOOLEAN NOT NULL
+);
+
+CREATE OR REPLACE FUNCTION sincronizar_clasificacion_cuenta()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    DELETE FROM cuentas_activo WHERE cuenta_id = NEW.id;
+    DELETE FROM cuentas_pasivo WHERE cuenta_id = NEW.id;
+    DELETE FROM cuentas_patrimonio_neto WHERE cuenta_id = NEW.id;
+    DELETE FROM cuentas_resultados WHERE cuenta_id = NEW.id;
+
+    CASE NEW.tipo
+      WHEN 'ACTIVO' THEN
+        INSERT INTO cuentas_activo (cuenta_id, codigo, nombre, activo)
+        VALUES (NEW.id, NEW.codigo, NEW.nombre, NEW.activo);
+      WHEN 'PASIVO' THEN
+        INSERT INTO cuentas_pasivo (cuenta_id, codigo, nombre, activo)
+        VALUES (NEW.id, NEW.codigo, NEW.nombre, NEW.activo);
+      WHEN 'PATRIMONIO_NETO' THEN
+        INSERT INTO cuentas_patrimonio_neto (cuenta_id, codigo, nombre, activo)
+        VALUES (NEW.id, NEW.codigo, NEW.nombre, NEW.activo);
+      WHEN 'RESULTADO_POSITIVO', 'RESULTADO_NEGATIVO' THEN
+        INSERT INTO cuentas_resultados (cuenta_id, codigo, nombre, tipo, activo)
+        VALUES (NEW.id, NEW.codigo, NEW.nombre, NEW.tipo, NEW.activo);
+    END CASE;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_sincronizar_clasificacion_cuenta
+AFTER INSERT OR UPDATE OF codigo, nombre, tipo, activo
+ON cuentas_contables
+FOR EACH ROW EXECUTE FUNCTION sincronizar_clasificacion_cuenta();
+
 CREATE TABLE formas_pago (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     codigo VARCHAR(30) NOT NULL UNIQUE,
@@ -121,6 +185,7 @@ CREATE TABLE detalle_compras (
     compra_id BIGINT NOT NULL REFERENCES compras(id),
     producto_id BIGINT REFERENCES productos(id),
     descripcion VARCHAR(180),
+    cuenta_id BIGINT REFERENCES cuentas_contables(id),
     cantidad INTEGER NOT NULL CHECK (cantidad > 0),
     precio_unitario NUMERIC(14, 2) NOT NULL CHECK (precio_unitario >= 0),
     neto NUMERIC(14, 2) NOT NULL CHECK (neto >= 0),
@@ -267,7 +332,38 @@ INSERT INTO cuentas_contables (codigo, nombre, tipo) VALUES
     ('5.1.01', 'Costo de Mercaderias Vendidas', 'RESULTADO_NEGATIVO'),
     ('5.2.01', 'Gastos y Servicios Varios', 'RESULTADO_NEGATIVO'),
     ('4.2.01', 'Recargos Financieros Ganados', 'RESULTADO_POSITIVO'),
-    ('5.2.02', 'Recargos Financieros Pagados', 'RESULTADO_NEGATIVO')
+    ('5.2.02', 'Recargos Financieros Pagados', 'RESULTADO_NEGATIVO'),
+    ('1.1.08', 'Deudores Varios', 'ACTIVO'),
+    ('1.1.09', 'Valores a Depositar', 'ACTIVO'),
+    ('1.1.10', 'Valores Diferidos a Depositar', 'ACTIVO'),
+    ('1.1.11', 'Tarjeta de Credito XX', 'ACTIVO'),
+    ('1.2.01', 'Rodados', 'ACTIVO'),
+    ('1.2.02', 'Muebles y Utiles', 'ACTIVO'),
+    ('1.2.03', 'Instalaciones', 'ACTIVO'),
+    ('1.2.04', 'Inmuebles', 'ACTIVO'),
+    ('1.2.05', 'Maquinarias', 'ACTIVO'),
+    ('1.2.06', 'Materias Primas', 'ACTIVO'),
+    ('1.2.07', 'Equipos de Computacion', 'ACTIVO'),
+    ('2.1.05', 'Acreedores Varios', 'PASIVO'),
+    ('2.1.06', 'Valores Diferidos a Pagar', 'PASIVO'),
+    ('3.1.02', 'Reservas', 'PATRIMONIO_NETO'),
+    ('3.1.03', 'Utilidad del Ejercicio', 'PATRIMONIO_NETO'),
+    ('3.1.04', 'Quebranto del Ejercicio', 'PATRIMONIO_NETO'),
+    ('4.1.02', 'Ventas (Bienes o Servicios prestados)', 'RESULTADO_POSITIVO'),
+    ('4.1.03', 'Alquileres Ganados', 'RESULTADO_POSITIVO'),
+    ('4.1.04', 'Intereses Ganados', 'RESULTADO_POSITIVO'),
+    ('4.1.05', 'Descuentos Obtenidos', 'RESULTADO_POSITIVO'),
+    ('4.1.06', 'Comisiones Ganadas', 'RESULTADO_POSITIVO'),
+    ('5.2.03', 'Alquileres Perdidos', 'RESULTADO_NEGATIVO'),
+    ('5.2.04', 'Sueldos y Jornales', 'RESULTADO_NEGATIVO'),
+    ('5.2.05', 'Fletes y Acarreos', 'RESULTADO_NEGATIVO'),
+    ('5.2.06', 'Descuentos Cedidos', 'RESULTADO_NEGATIVO'),
+    ('5.2.07', 'Seguros', 'RESULTADO_NEGATIVO'),
+    ('5.2.08', 'Impuestos', 'RESULTADO_NEGATIVO'),
+    ('5.2.09', 'Intereses Perdidos', 'RESULTADO_NEGATIVO'),
+    ('5.2.10', 'Gastos Generales', 'RESULTADO_NEGATIVO'),
+    ('5.2.11', 'Comisiones Perdidas', 'RESULTADO_NEGATIVO'),
+    ('5.2.12', 'Publicidad Perdida', 'RESULTADO_NEGATIVO')
 ON CONFLICT (codigo) DO NOTHING;
 
 INSERT INTO formas_pago (codigo, nombre, cuenta_venta_id, cuenta_compra_id)
@@ -275,8 +371,8 @@ SELECT medios.codigo, medios.nombre, venta.id, compra.id
 FROM (VALUES
     ('EFECTIVO', 'Efectivo', '1.1.01', '1.1.01'),
     ('BANCO', 'Banco', '1.1.02', '1.1.02'),
-    ('CHEQUE_PROPIO', 'Cheque propio', '1.1.02', '1.1.02'),
-    ('CHEQUE_DIFERIDO', 'Cheque diferido', '1.1.04', '2.1.02'),
+    ('CHEQUE_PROPIO', 'Cheque', '1.1.09', '1.1.02'),
+    ('CHEQUE_DIFERIDO', 'Cheque diferido', '1.1.10', '2.1.06'),
     ('CUENTA_CORRIENTE', 'Cuenta corriente', '1.1.06', '2.1.01'),
     ('PAGARE', 'Pagaré / documento', '1.1.04', '2.1.02')
 ) AS medios(codigo, nombre, codigo_venta, codigo_compra)

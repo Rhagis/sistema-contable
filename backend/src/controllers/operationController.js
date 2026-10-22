@@ -1,12 +1,20 @@
 import { pool } from '../config/db.js'
 import { httpError } from '../middleware/errors.js'
 import { renderInvoicePdf } from '../services/invoicePdfService.js'
-import { createPurchase, createSale } from '../services/operationService.js'
+import { createPurchase, createSale, updateSale } from '../services/operationService.js'
 
 // El controlador mantiene el contrato HTTP y delega reglas y persistencia al servicio transaccional.
 export async function addSale(request, response, next) {
   try {
     response.status(201).json(await createSale(request.body, request.user.id))
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function editSale(request, response, next) {
+  try {
+    response.json(await updateSale(request.params.id, request.body, request.user.id))
   } catch (error) {
     next(error)
   }
@@ -36,15 +44,18 @@ async function fetchOperations(type, id) {
           p.condicion_iva AS contraparte_condicion_iva, p.${isSale ? 'identificacion' : 'cuit'} AS contraparte_cuit,
           COALESCE(json_agg(json_build_object(
             'producto_id', d.producto_id, 'producto', COALESCE(pr.nombre${isSale ? '' : ', d.descripcion'}), 'cantidad', d.cantidad,
+            'cuenta_codigo', ${isSale ? 'NULL' : 'cc.codigo'}, 'cuenta', ${isSale ? 'NULL' : 'cc.nombre'},
             'precio_unitario', d.precio_unitario, 'neto', d.neto, 'iva', d.iva, 'total', d.total
-          )) FILTER (WHERE d.id IS NOT NULL), '[]') AS detalle,
+          ) ORDER BY d.id) FILTER (WHERE d.id IS NOT NULL), '[]') AS detalle,
           COALESCE((SELECT json_agg(json_build_object(
-            'forma_pago', fp.nombre, 'importe', po.importe, 'recargo_porcentaje', po.recargo_porcentaje, 'recargo_importe', po.recargo_importe
-          )) FROM pagos_operacion po JOIN formas_pago fp ON fp.id = po.forma_pago_id
+            'forma_pago_id', fp.id, 'codigo', fp.codigo, 'forma_pago', fp.nombre, 'importe', po.importe,
+            'recargo_porcentaje', po.recargo_porcentaje, 'recargo_importe', po.recargo_importe
+          ) ORDER BY po.id) FROM pagos_operacion po JOIN formas_pago fp ON fp.id = po.forma_pago_id
           WHERE po.${isSale ? 'venta_id' : 'compra_id'} = o.id), '[]') AS pagos
        FROM ${table} o JOIN ${party} p ON p.id = o.${partyId}
        LEFT JOIN ${isSale ? 'detalle_ventas' : 'detalle_compras'} d ON d.${isSale ? 'venta_id' : 'compra_id'} = o.id
        LEFT JOIN productos pr ON pr.id = d.producto_id
+       ${isSale ? '' : 'LEFT JOIN cuentas_contables cc ON cc.id = d.cuenta_id'}
        WHERE ($1::BIGINT IS NULL OR o.id = $1)
        GROUP BY o.id, p.id
        ORDER BY o.fecha DESC, o.id DESC LIMIT 200`, [operationId],
