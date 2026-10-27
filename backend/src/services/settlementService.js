@@ -20,7 +20,8 @@ function configFor(type) {
 
 // Saldo pendiente = importe del renglón a crédito (más recargo) menos lo ya cancelado.
 const PENDING_SQL = (config) => `
-  SELECT po.id AS pago_operacion_id, o.id AS operacion_id, o.numero_comprobante, o.tipo_comprobante, o.fecha AS fecha_operacion,
+  SELECT po.id AS pago_operacion_id, o.id AS operacion_id,
+         COALESCE(o.numero_comprobante, 'Gasto sin factura') AS numero_comprobante, o.tipo_comprobante, o.fecha AS fecha_operacion,
          t.razon_social AS tercero, fp.nombre AS forma_pago,
          (po.importe + po.recargo_importe) AS total,
          COALESCE(SUM(c.importe), 0) AS cancelado,
@@ -47,7 +48,8 @@ export async function listSettlements(type) {
   const config = configFor(type)
   const { rows } = await pool.query(
     `SELECT c.id, c.numero, c.fecha, c.importe, c.observaciones, mp.nombre AS medio,
-            o.numero_comprobante, t.razon_social AS tercero, fp.nombre AS forma_origen
+            COALESCE(o.numero_comprobante, 'Gasto sin factura') AS numero_comprobante,
+            t.razon_social AS tercero, fp.nombre AS forma_origen
      FROM cancelaciones c
      JOIN pagos_operacion po ON po.id = c.pago_operacion_id
      JOIN formas_pago fp ON fp.id = po.forma_pago_id

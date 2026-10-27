@@ -2,19 +2,20 @@ import Decimal from 'decimal.js'
 import { pool } from '../config/db.js'
 import { httpError } from '../middleware/errors.js'
 import { createJournal, getAccountIds, listAccounts } from '../services/accountingService.js'
+import { renderMonthlyBalancePdf } from '../services/monthlyBalancePdfService.js'
+import { summarizeBalance } from '../services/balanceTotals.js'
+import { renderJournalPdf } from '../services/journalPdfService.js'
 import { withTransaction } from '../services/transactionService.js'
 
 const validPeriod = (mes, anio) => Number.isInteger(mes) && mes >= 1 && mes <= 12
   && Number.isInteger(anio) && anio >= 2000 && anio <= 9999
 
-// Devuelve lineas del diario con filtros opcionales por asiento, fechas y tipo.
-export async function journal(request, response, next) {
-  try {
-    const { desde, hasta, tipo } = request.query
+async function fetchJournalRows(query) {
+    const { desde, hasta, tipo } = query
     const values = []
     const filters = []
-    if (request.params.id) {
-      const id = Number(request.params.id)
+    if (query.id) {
+      const id = Number(query.id)
       if (!Number.isSafeInteger(id) || id < 1) throw httpError(400, 'El identificador de asiento no es válido.')
       values.push(id)
       filters.push(`a.id = $${values.length}`)
@@ -30,7 +31,104 @@ export async function journal(request, response, next) {
        JOIN cuentas_contables c ON c.id = d.cuenta_id
        ${where} ORDER BY a.fecha, a.id, d.id`, values,
     )
-    response.json(rows)
+    return rows
+}
+
+// Devuelve lineas del diario con filtros opcionales por asiento, fechas y tipo.
+export async function journal(request, response, next) {
+  try {
+    response.json(await fetchJournalRows({ ...request.query, id: request.params.id }))
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function journalPdf(request, response, next) {
+  try {
+    const { desde, hasta } = request.query
+    const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+      && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+      && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
+    if (!validDate(desde || '') || !validDate(hasta || '') || desde > hasta) {
+      throw httpError(400, 'Indique un rango de fechas válido para generar el Libro Diario.')
+    }
+    const rows = await fetchJournalRows(request.query)
+    const bytes = await renderJournalPdf(rows, request.query)
+    response.type('application/pdf')
+    response.setHeader('Content-Disposition', 'attachment; filename="libro-diario.pdf"')
+    response.send(Buffer.from(bytes))
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function fetchMonthlyBalance(mes, anio) {
+  if (!validPeriod(mes, anio)) throw httpError(400, 'Mes y año deben ser válidos.')
+  const start = `${anio}-${String(mes).padStart(2, '0')}-01`
+  const endMonth = mes === 12 ? 1 : mes + 1
+  const endYear = mes === 12 ? anio + 1 : anio
+  const end = `${String(endYear).padStart(4, '0')}-${String(endMonth).padStart(2, '0')}-01`
+  const { rows } = await pool.query(
+    `SELECT c.codigo, c.nombre, c.tipo,
+        COALESCE(SUM(d.debe), 0) AS debe_acumulado,
+        COALESCE(SUM(d.haber), 0) AS haber_acumulado
+     FROM cuentas_contables c
+     LEFT JOIN (
+       SELECT d.cuenta_id, d.debe, d.haber
+       FROM detalle_asientos d JOIN asientos a ON a.id = d.asiento_id
+       WHERE a.fecha >= $1::DATE AND a.fecha < $2::DATE
+     ) d ON d.cuenta_id = c.id
+     WHERE c.activo = TRUE
+     GROUP BY c.id
+     HAVING COALESCE(SUM(d.debe), 0) <> 0 OR COALESCE(SUM(d.haber), 0) <> 0
+     ORDER BY c.codigo`, [start, end],
+  )
+  return rows.map((row) => {
+    const balance = new Decimal(row.debe_acumulado).minus(row.haber_acumulado)
+    // Activo y Resultado negativo son deudores; Pasivo (incluye Patrimonio Neto) y Resultado positivo, acreedores.
+    const column = {
+      ACTIVO: 'activo',
+      PASIVO: 'pasivo',
+      PATRIMONIO_NETO: 'pasivo',
+      RESULTADO_POSITIVO: 'resultado_positivo',
+      RESULTADO_NEGATIVO: 'resultado_negativo',
+    }[row.tipo] ?? 'resultado_positivo'
+    const natural = ['activo', 'resultado_negativo'].includes(column) ? balance : balance.negated()
+    const amounts = { activo: '0.00', pasivo: '0.00', resultado_positivo: '0.00', resultado_negativo: '0.00' }
+    amounts[column] = natural.toFixed(2)
+    return {
+      codigo: row.codigo,
+      nombre: row.nombre,
+      tipo: row.tipo,
+      debe: new Decimal(row.debe_acumulado).toFixed(2),
+      haber: new Decimal(row.haber_acumulado).toFixed(2),
+      saldo_deudor: balance.isPositive() ? balance.toFixed(2) : '0.00',
+      saldo_acreedor: balance.isNegative() ? balance.abs().toFixed(2) : '0.00',
+      ...amounts,
+    }
+  })
+}
+
+export async function monthlyBalance(request, response, next) {
+  try {
+    const mes = Number(request.query.mes)
+    const anio = Number(request.query.anio)
+    const cuentas = await fetchMonthlyBalance(mes, anio)
+    response.json({ mes, anio, cuentas, totales: summarizeBalance(cuentas) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function monthlyBalancePdf(request, response, next) {
+  try {
+    const mes = Number(request.query.mes)
+    const anio = Number(request.query.anio)
+    const rows = await fetchMonthlyBalance(mes, anio)
+    const bytes = await renderMonthlyBalancePdf(rows, mes, anio)
+    response.type('application/pdf')
+    response.setHeader('Content-Disposition', `attachment; filename="balance-${anio}-${String(mes).padStart(2, '0')}.pdf"`)
+    response.send(Buffer.from(bytes))
   } catch (error) {
     next(error)
   }
@@ -153,7 +251,7 @@ export async function dashboard(request, response, next) {
         FROM compras WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE)`),
       pool.query('SELECT id, nombre, stock FROM productos WHERE activo = TRUE AND stock <= 3 ORDER BY stock, nombre LIMIT 8'),
       pool.query(`SELECT fecha, 'VENTA' AS tipo, numero_comprobante AS comprobante, total
-        FROM ventas UNION ALL SELECT fecha, 'COMPRA', numero_comprobante, total FROM compras
+        FROM ventas UNION ALL SELECT fecha, 'COMPRA', COALESCE(numero_comprobante, 'Gasto sin factura'), total FROM compras
         ORDER BY fecha DESC LIMIT 8`),
     ])
     const salesVat = new Decimal(sales.rows[0].iva)

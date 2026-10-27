@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { addPurchase, addSale, editSale, invoicePdf, listOperations } from '../controllers/operationController.js'
-import { accounts, dashboard, journal, ledger, paymentMethods, settleVat, vatSummary } from '../controllers/reportController.js'
+import {
+  accounts, dashboard, journal, journalPdf, ledger, monthlyBalance, monthlyBalancePdf, paymentMethods, settleVat, vatSummary,
+} from '../controllers/reportController.js'
 import { requireAuth } from '../middleware/auth.js'
 import { settlementHandlers } from '../controllers/settlementController.js'
 
@@ -43,6 +45,9 @@ router.get('/compras/:id', (request, response, next) => {
   return listOperations(request, response, next)
 })
 router.get('/libro-diario', journal)
+router.get('/libro-diario/pdf', journalPdf)
+router.get('/balance/pdf', monthlyBalancePdf)
+router.get('/balance', monthlyBalance)
 router.get('/cobros', cobros.list)
 router.post('/cobros', cobros.create)
 router.get('/pagos', pagos.list)

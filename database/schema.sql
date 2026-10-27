@@ -170,7 +170,7 @@ CREATE TABLE compras (
     proveedor_id BIGINT NOT NULL REFERENCES proveedores(id),
     fecha DATE NOT NULL,
     tipo_comprobante VARCHAR(20) NOT NULL DEFAULT 'FACTURA_A',
-    numero_comprobante VARCHAR(30) NOT NULL,
+    numero_comprobante VARCHAR(30),
     neto NUMERIC(14, 2) NOT NULL CHECK (neto >= 0),
     iva NUMERIC(14, 2) NOT NULL CHECK (iva >= 0),
     total NUMERIC(14, 2) NOT NULL CHECK (total >= 0),

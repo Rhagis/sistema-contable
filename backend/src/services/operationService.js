@@ -504,7 +504,7 @@ function todayDate() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
-// Compra: registra factura, aumenta stock/costo, guarda pagos y contabiliza IVA credito.
+// Compra: registra comprobante o gasto sin factura, guarda pagos y contabiliza el impacto contable.
 export async function createPurchase(input, userId) {
   if (!Array.isArray(input.items) || input.items.length === 0) {
     throw httpError(400, 'La operación debe incluir al menos un producto.')
@@ -528,13 +528,18 @@ export async function createPurchase(input, userId) {
     }
   })
   const items = catalogInput.length ? validateItems(catalogInput) : []
-  if (!input.proveedor_id || !input.fecha || !input.numero_comprobante) {
-    throw httpError(400, 'Proveedor, fecha y número de comprobante son obligatorios.')
+  if (!input.proveedor_id || !input.fecha) {
+    throw httpError(400, 'Proveedor y fecha son obligatorios.')
   }
 
   const invoiceType = input.tipo_comprobante ?? 'FACTURA_A'
-  if (!['FACTURA_A', 'FACTURA_B'].includes(invoiceType)) {
-    throw httpError(400, 'El tipo de comprobante debe ser FACTURA_A o FACTURA_B.')
+  const noInvoice = invoiceType === 'SIN_COMPROBANTE'
+  if (!['FACTURA_A', 'FACTURA_B', 'SIN_COMPROBANTE'].includes(invoiceType)) {
+    throw httpError(400, 'El tipo de comprobante debe ser FACTURA_A, FACTURA_B o SIN_COMPROBANTE.')
+  }
+  const invoiceNumber = noInvoice ? null : String(input.numero_comprobante ?? '').trim()
+  if (!noInvoice && !invoiceNumber) {
+    throw httpError(400, 'El número de factura es obligatorio.')
   }
 
   return withTransaction(async (client) => {
@@ -561,7 +566,7 @@ export async function createPurchase(input, userId) {
     const { rows } = await client.query(
       `INSERT INTO compras (proveedor_id, fecha, tipo_comprobante, numero_comprobante, neto, iva, total, creado_por)
        VALUES ($1, $2, $8, $3, $4, $5, $6, $7) RETURNING *`,
-      [input.proveedor_id, input.fecha, String(input.numero_comprobante).trim(),
+      [input.proveedor_id, input.fecha, invoiceNumber,
         net.toFixed(2), tax.toFixed(2), total.toFixed(2), userId, invoiceType],
     )
     const purchase = rows[0]
@@ -608,7 +613,9 @@ export async function createPurchase(input, userId) {
       ...payments.map((payment) => ({ cuentaId: payment.cuentaId, haber: payment.cobrado })),
     ]
     await createJournal(client, {
-      fecha: input.fecha, descripcion: `Compra según factura ${purchase.numero_comprobante}`,
+      fecha: input.fecha,
+      descripcion: noInvoice ? `Gasto sin comprobante - ${freeLines[0]?.descripcion || 'compra'}`.slice(0, 240)
+        : `Compra según factura ${purchase.numero_comprobante}`,
       tipo: 'COMPRA', reference: { compraId: purchase.id }, userId, lines: purchaseLines,
     })
     return purchase

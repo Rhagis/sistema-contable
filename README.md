@@ -41,7 +41,11 @@ Las ventas existentes se pueden editar desde el listado. La edición conserva el
 
 **Compra:** valida proveedor, detalle, factura y medios de pago; bloquea productos; calcula IVA Crédito; registra la compra y entradas de stock; actualiza el costo al último precio neto; asienta Mercaderías e IVA Crédito contra las cuentas de pago. Todo se confirma junto o se revierte junto.
 
+Los egresos sin factura también se pueden registrar desde Compras seleccionando **Gasto sin factura**. Se indica proveedor, fecha, detalle, cuenta de gasto y forma de pago; no se exige número de factura ni se computa IVA Crédito.
+
 **IVA mensual:** suma IVA de ventas y compras del mes. `saldo = débito - crédito`; el saldo positivo crea IVA a Pagar, el negativo crea IVA Saldo a Favor. Una clave única impide liquidar dos veces el mismo período.
+
+**Balance mensual:** presenta, solo con los asientos fechados dentro del mes seleccionado, las sumas del Debe y Haber por cuenta, sus saldos deudor/acreedor (diferencia entre Debe y Haber) y ese saldo repartido en cuatro columnas según el rubro (Activo, Pasivo + Patrimonio Neto, Resultado positivo, Resultado negativo). Al pie se muestran las sumas y una fila de totales con las sumas de Debe, Haber y saldos, y la diferencia (Activo vs. Pasivo y Resultado positivo vs. negativo) colocada solo bajo la columna de menor valor. Se puede consultar en pantalla o descargar en PDF. En el Libro Diario se seleccionan las fechas Desde/Hasta y se genera el PDF del rango indicado.
 
 ## Instalación local
 
@@ -53,7 +57,7 @@ Requisitos: Node.js 20.19+ y PostgreSQL 14+.
    ```powershell
    & 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -U postgres -d apexsoftware -f database/schema.sql
    ```
-3. Para una base existente creada con el esquema anterior, aplicar `database/demo_setup.sql` para agregar las tablas y cuentas del nuevo plan, `database/migrations/007_cheque_accounts.sql` para corregir las cuentas asociadas a los cheques y `database/migrations/008_compras_cuenta_por_renglon.sql` para guardar la cuenta contable elegida en cada renglón libre de compra. El primer script crea además `admin@apexsoftware.local` con la contraseña temporal `admin`; después ejecutá `npm run seed:admin` para reemplazarla con `ADMIN_EMAIL` y `ADMIN_PASSWORD` configurados en `.env`. No ejecutes el script demo en una instalación nueva ni lo uses en producción.
+3. Para una base existente creada con el esquema anterior, aplicar `database/demo_setup.sql` para agregar las tablas y cuentas del nuevo plan, `database/migrations/007_cheque_accounts.sql` para corregir las cuentas asociadas a los cheques, `database/migrations/008_compras_cuenta_por_renglon.sql` para guardar la cuenta contable elegida en cada renglón libre de compra y `database/migrations/009_compras_sin_comprobante.sql` para habilitar gastos sin número de factura. El primer script crea además `admin@apexsoftware.local` con la contraseña temporal `admin`; después ejecutá `npm run seed:admin` para reemplazarla con `ADMIN_EMAIL` y `ADMIN_PASSWORD` configurados en `.env`. No ejecutes el script demo en una instalación nueva ni lo uses en producción.
 4. Copiar `backend/.env.example` a `backend/.env` y configurar `DATABASE_URL`, un `JWT_SECRET` aleatorio y una contraseña local para `ADMIN_PASSWORD`:
 
    ```powershell
@@ -109,6 +113,8 @@ Las ventas se acreditan en 4.1.02 (Ventas de bienes o servicios). Las ventas de 
 - `GET /api/dashboard`, `/api/cuentas`, `/api/formas-pago`
 - `GET /api/asientos`, `GET /api/asientos/:id`
 - `GET /api/libro-diario?desde=&hasta=&tipo=`
+- `GET /api/libro-diario/pdf?desde=&hasta=&tipo=` descarga el PDF con los filtros del período seleccionado.
+- `GET /api/balance?mes=9&anio=2026`, `GET /api/balance/pdf?mes=9&anio=2026`
 - `GET /api/mayor/:cuentaId`
 - `GET /api/iva?mes=9&anio=2026`, `POST /api/iva/liquidar`
 

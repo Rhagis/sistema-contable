@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import Decimal from 'decimal.js'
 import { pool } from '../src/config/db.js'
-import { allocateSettlements, createSale, reverseJournal } from '../src/services/operationService.js'
+import { allocateSettlements, createPurchase, createSale, reverseJournal } from '../src/services/operationService.js'
 
 test('reasigna cobros a los nuevos saldos de crédito en orden cronológico', () => {
   const settlements = [
@@ -113,4 +113,45 @@ test('registra una venta de servicios sin descontar stock ni generar CMV', async
     queries.filter(({ sql }) => sql.includes('INSERT INTO asientos')).map(({ values }) => values[2]),
     ['VENTA'],
   )
+})
+
+test('registra un gasto sin factura sin generar crédito fiscal de IVA', async (context) => {
+  const queries = []
+  const client = {
+    async query(sql, values = []) {
+      queries.push({ sql, values })
+      if (sql.includes('FROM proveedores WHERE')) return { rows: [{ id: 8 }] }
+      if (sql.includes('FROM formas_pago fp')) return { rows: [{ id: 1, codigo: 'EFECTIVO', cuenta_id: 2 }] }
+      if (sql.includes('FROM cuentas_activo')) return { rows: [
+        { id: 3, codigo: '1.1.03' },
+        { id: 4, codigo: '1.1.05' },
+        { id: 5, codigo: '5.2.01' },
+        { id: 6, codigo: '5.2.02' },
+      ] }
+      if (sql.includes('INSERT INTO compras')) return { rows: [{
+        id: 15, tipo_comprobante: 'SIN_COMPROBANTE', numero_comprobante: null, neto: '100.00', iva: '0.00', total: '100.00',
+      }] }
+      if (sql.includes('INSERT INTO pagos_operacion')) return { rows: [{ id: 16 }] }
+      if (sql.includes('INSERT INTO asientos')) return { rows: [{ id: 17 }] }
+      return { rows: [] }
+    },
+    release() {},
+  }
+  context.mock.method(pool, 'connect', async () => client)
+
+  const purchase = await createPurchase({
+    proveedor_id: 8,
+    fecha: '2026-10-27',
+    tipo_comprobante: 'SIN_COMPROBANTE',
+    items: [{ descripcion: 'Servicio de internet', cantidad: 1, precio_unitario: 100, cuenta_codigo: '5.2.01' }],
+    pagos: [{ forma_pago_id: 1, importe: 100 }],
+  }, 2)
+
+  const purchaseInsert = queries.find(({ sql }) => sql.includes('INSERT INTO compras'))
+  const journalInsert = queries.find(({ sql }) => sql.includes('INSERT INTO asientos'))
+  assert.equal(purchase.numero_comprobante, null)
+  assert.equal(purchaseInsert.values[2], null)
+  assert.equal(purchaseInsert.values[7], 'SIN_COMPROBANTE')
+  assert.equal(purchaseInsert.values[4], '0.00')
+  assert.equal(journalInsert.values[1], 'Gasto sin comprobante - Servicio de internet')
 })

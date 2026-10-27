@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowDownLeft, ArrowUpRight, Banknote, BookOpen, Boxes, BriefcaseBusiness, CalendarDays,
-  Check, ClipboardList, CreditCard, FileText, Home, LogOut, Menu, Pencil,
-  Plus, Settings, ShieldCheck, ShoppingBag, ShoppingCart, Users, Wallet, X,
+  Check, ClipboardList, CreditCard, Download, FileText, Home, LogOut, Menu, Pencil,
+  Plus, Scale, Settings, ShieldCheck, ShoppingBag, ShoppingCart, Users, Wallet, X,
 } from 'lucide-react'
 import api, { errorMessage } from './api'
 import './theme.css'
@@ -18,6 +18,7 @@ const sections = [
   { id: 'clientes', label: 'Clientes', icon: Users },
   { id: 'proveedores', label: 'Proveedores', icon: BriefcaseBusiness },
   { id: 'diario', label: 'Libro Diario', icon: BookOpen },
+  { id: 'balance', label: 'Balance mensual', icon: Scale },
   { id: 'mayor', label: 'Mayor', icon: ClipboardList },
   { id: 'iva', label: 'Liquidación IVA', icon: FileText },
 ]
@@ -31,6 +32,9 @@ const currentDateLabel = new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium' 
 const currentPeriodLabel = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(new Date())
 const money = (value) => currency.format(Number(value || 0))
 const dateLabel = (value) => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('es-AR') : '—'
+const journalParams = (filters) => Object.fromEntries(
+  Object.entries(filters).filter(([key, value]) => ['desde', 'hasta', 'tipo'].includes(key) && value),
+)
 
 // Coordina sesion, datos compartidos, navegacion y formularios de las distintas pantallas.
 function App() {
@@ -76,8 +80,9 @@ function App() {
       else if (section === 'ventas' || section === 'compras' || section === 'cobros' || section === 'pagos') result = (await api.get(`/${section}`)).data
       else if (['productos', 'clientes', 'proveedores'].includes(section)) result = (await api.get(`/${section}`)).data
       else if (section === 'diario') {
-        const params = Object.fromEntries(Object.entries(filters).filter(([key, value]) => ['desde', 'hasta', 'tipo'].includes(key) && value))
-        result = (await api.get('/libro-diario', { params })).data
+        result = (await api.get('/libro-diario', { params: journalParams(filters) })).data
+      } else if (section === 'balance') {
+        result = (await api.get('/balance', { params: { mes: filters.mes, anio: filters.anio } })).data
       } else if (section === 'mayor') {
         const accountId = filters.cuentaId || lookups.cuentas[0]?.id
         result = accountId ? (await api.get(`/mayor/${accountId}`)).data : { cuenta: null, movimientos: [] }
@@ -228,6 +233,55 @@ function App() {
     }
   }
 
+  async function downloadJournalPdf() {
+    if (!filters.desde || !filters.hasta) {
+      setNotice('Seleccioná las fechas Desde y Hasta para generar el período del Libro Diario.')
+      return
+    }
+    setBusy(true)
+    setNotice('')
+    try {
+      const { data: pdf } = await api.get('/libro-diario/pdf', {
+        params: journalParams(filters),
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(pdf)
+      const link = document.createElement('a')
+      const dateRange = filters.desde && filters.hasta ? `-${filters.desde}-${filters.hasta}` : ''
+      link.href = url
+      link.download = `libro-diario${dateRange}.pdf`
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setNotice('Libro Diario descargado correctamente.')
+    } catch (error) {
+      setNotice(errorMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function downloadMonthlyBalancePdf() {
+    setBusy(true)
+    setNotice('')
+    try {
+      const { data: pdf } = await api.get('/balance/pdf', {
+        params: { mes: filters.mes, anio: filters.anio },
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(pdf)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `balance-${filters.anio}-${String(filters.mes).padStart(2, '0')}.pdf`
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setNotice('Balance mensual descargado correctamente.')
+    } catch (error) {
+      setNotice(errorMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Sin sesion se muestra solo el acceso; autenticado se habilita la navegacion y las vistas.
   if (!user) {
     return (
@@ -295,7 +349,8 @@ function App() {
           {section === 'compras' && <OperationList type="compras" rows={data} onCreate={() => setModal(true)} onView={viewInvoice} />}
           {['cobros', 'pagos'].includes(section) && <SettlementList type={section} data={data} onSettle={setSettleRow} />}
           {['productos', 'clientes', 'proveedores'].includes(section) && <CatalogList type={section} rows={data} onCreate={() => { setEditingRecord(null); setModal(true) }} onEdit={(record) => { setEditingRecord(record); setModal(true) }} onDeactivate={deactivate} />}
-          {section === 'diario' && <JournalView rows={data} filters={filters} setFilters={setFilters} />}
+          {section === 'diario' && <JournalView rows={data} filters={filters} setFilters={setFilters} onDownload={downloadJournalPdf} busy={busy} />}
+          {section === 'balance' && <MonthlyBalanceView data={data} filters={filters} setFilters={setFilters} onDownload={downloadMonthlyBalancePdf} busy={busy} />}
           {section === 'mayor' && <LedgerView data={data} accounts={lookups.cuentas} filters={filters} setFilters={setFilters} />}
           {section === 'iva' && <VatView data={data} filters={filters} setFilters={setFilters} onSettle={settleVat} busy={busy} />}
           {!sections.some((item) => item.id === section) && <div className="page-heading"><div className="eyebrow">EMPRESA</div><h1>Configuración</h1><p>APEX SOFTWARE · Desarrollo, personalización y mantenimiento de paginas web</p><p>Clientes: empresas, negocios, emprendimientos y personas interesadas. Costos: desarrollo inicial (CapEx), más dominio, hosting, certificados SSL y mantenimiento técnico continuo (OpEx).</p></div>}
@@ -364,11 +419,14 @@ function OperationList({ type, rows, onCreate, onView, onEdit }) {
   const sale = type === 'ventas'
   const operations = Array.isArray(rows) ? rows : []
   return <>
-    <PageHeading eyebrow={sale ? 'CICLO COMERCIAL / INGRESOS' : 'CICLO COMERCIAL / EGRESOS'} title={sale ? 'Ventas' : 'Compras'} detail={sale ? 'Comprobantes emitidos e impacto en caja.' : 'Facturas recibidas y movimientos de inventario.'}
+    <PageHeading eyebrow={sale ? 'CICLO COMERCIAL / INGRESOS' : 'CICLO COMERCIAL / EGRESOS'} title={sale ? 'Ventas' : 'Compras'} detail={sale ? 'Comprobantes emitidos e impacto en caja.' : 'Facturas recibidas y gastos registrados.'}
       action={<button className="button primary" onClick={onCreate}><Plus size={17} />{sale ? 'Nueva venta' : 'Nueva compra'}</button>} />
     <div className="table-toolbar"><div className="table-count">{operations.length} operaciones</div></div>
     <div className="table-wrap"><table><thead><tr><th>COMPROBANTE</th><th>{sale ? 'CLIENTE' : 'PROVEEDOR'}</th><th>FECHA</th><th>NETO</th><th>IVA</th><th className="align-right">TOTAL</th><th></th></tr></thead><tbody>
-      {operations.map((row) => <tr key={row.id}><td><span className="doc-code">{row.tipo_comprobante?.replace('_', ' ')}</span><b>{row.numero_comprobante}</b></td><td>{row.contraparte}</td><td>{dateLabel(row.fecha)}</td><td>{money(row.neto)}</td><td>{money(row.iva)}</td><td className="align-right amount">{money(row.total)}</td><td>{sale && <button className="icon-button" title="Editar venta" onClick={() => onEdit(row.id)}><Pencil size={15} /></button>}<button className="text-action" onClick={() => onView(row.id)}>Ver factura</button></td></tr>)}
+      {operations.map((row) => {
+        const noInvoice = row.tipo_comprobante === 'SIN_COMPROBANTE'
+        return <tr key={row.id}><td><span className="doc-code">{noInvoice ? 'GASTO' : row.tipo_comprobante?.replace('_', ' ')}</span><b>{row.numero_comprobante || 'Sin comprobante'}</b></td><td>{row.contraparte}</td><td>{dateLabel(row.fecha)}</td><td>{money(row.neto)}</td><td>{money(row.iva)}</td><td className="align-right amount">{money(row.total)}</td><td>{sale && <button className="icon-button" title="Editar venta" onClick={() => onEdit(row.id)}><Pencil size={15} /></button>}{!noInvoice && <button className="text-action" onClick={() => onView(row.id)}>Ver factura</button>}</td></tr>
+      })}
       {!operations.length && <tr><td colSpan="7"><EmptyState label="No hay operaciones para mostrar." /></td></tr>}
     </tbody></table></div>
   </>
@@ -434,14 +492,40 @@ function CatalogList({ type, rows, onCreate, onEdit, onDeactivate }) {
 }
 
 // Consulta visual del libro diario; los filtros se reflejan en la solicitud al API.
-function JournalView({ rows, filters, setFilters }) {
+function JournalView({ rows, filters, setFilters, onDownload, busy }) {
   const entries = Array.isArray(rows) ? rows : []
   return <>
-    <PageHeading eyebrow="CONTABILIDAD / REGISTROS" title="Libro Diario" detail="Asientos cronológicos con detalle por cuenta." />
+    <PageHeading eyebrow="CONTABILIDAD / REGISTROS" title="Libro Diario" detail="Asientos cronológicos con detalle por cuenta." action={<button className="button primary" onClick={onDownload} disabled={busy || !filters.desde || !filters.hasta}><Download size={17} />{busy ? 'Generando…' : 'Generar período PDF'}</button>} />
     <div className="filters-row"><label>Desde<input type="date" value={filters.desde} onChange={(event) => setFilters((old) => ({ ...old, desde: event.target.value }))} /></label><label>Hasta<input type="date" value={filters.hasta} onChange={(event) => setFilters((old) => ({ ...old, hasta: event.target.value }))} /></label><label>Tipo<select value={filters.tipo} onChange={(event) => setFilters((old) => ({ ...old, tipo: event.target.value }))}><option value="">Todos</option><option value="VENTA">Venta</option><option value="CMV">CMV</option><option value="COMPRA">Compra</option><option value="LIQUIDACION_IVA">Liquidación IVA</option><option value="APERTURA">Apertura</option><option value="COBRO">Cobro</option><option value="PAGO">Pago</option></select></label></div>
     <div className="table-wrap"><table><thead><tr><th>ASIENTO</th><th>FECHA</th><th>CONCEPTO / CUENTA</th><th>DEBE</th><th className="align-right">HABER</th></tr></thead><tbody>
       {entries.map((row) => <tr key={`${row.asiento_id}-${row.cuenta_codigo}`}><td><span className="journal-number">#{String(row.asiento_id).padStart(5, '0')}</span><small className="cell-sub">{row.tipo_operacion}</small></td><td>{dateLabel(row.fecha)}</td><td><b>{row.descripcion}</b><small className="cell-sub">{row.cuenta_codigo} · {row.cuenta}</small></td><td>{Number(row.debe) ? money(row.debe) : '—'}</td><td className="align-right">{Number(row.haber) ? money(row.haber) : '—'}</td></tr>)}
       {!entries.length && <tr><td colSpan="5"><EmptyState label="No hay asientos para este filtro." /></td></tr>}
+    </tbody></table></div>
+  </>
+}
+
+function MonthlyBalanceView({ data, filters, setFilters, onDownload, busy }) {
+  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+  const rows = data?.cuentas || []
+  const totals = data?.totales
+  const cell = (value) => Number(value) ? money(value) : '—'
+  const differences = totals ? [totals.diferencia_patrimonial, totals.diferencia_resultados] : []
+  const fields = ['debe', 'haber', 'saldo_deudor', 'saldo_acreedor', 'activo', 'pasivo', 'resultado_positivo', 'resultado_negativo']
+  const lastField = fields[fields.length - 1]
+  const summaryCell = (field, value) => <td key={field} className={field === lastField ? 'align-right' : undefined}><b>{value ? money(value) : ''}</b></td>
+  return <>
+    <PageHeading eyebrow="CONTABILIDAD / BALANCE" title="Balance mensual" detail="Sumas y saldos por cuenta contable con los asientos del mes seleccionado." action={<button className="button primary" onClick={onDownload} disabled={busy}><Download size={17} />{busy ? 'Generando…' : 'Descargar PDF'}</button>} />
+    <div className="filters-row vat-period">
+      <label>Mes<select value={filters.mes} onChange={(event) => setFilters((old) => ({ ...old, mes: Number(event.target.value) }))}>{months.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}</select></label>
+      <label>Año<input type="number" min="2000" max="9999" value={filters.anio} onChange={(event) => setFilters((old) => ({ ...old, anio: Number(event.target.value) }))} /></label>
+    </div>
+    <div className="table-wrap"><table><thead><tr><th>CUENTA</th><th>NOMBRE DE LA CUENTA</th><th>DEBE</th><th>HABER</th><th>SALDO DEUDOR</th><th>SALDO ACREEDOR</th><th>ACTIVO</th><th>PASIVO + PN</th><th>RESULTADO POSITIVO</th><th className="align-right">RESULTADO NEGATIVO</th></tr></thead><tbody>
+      {rows.map((row) => <tr key={row.codigo}><td><span className="journal-number">{row.codigo}</span></td><td><b>{row.nombre}</b></td><td>{money(row.debe)}</td><td>{money(row.haber)}</td><td>{cell(row.saldo_deudor)}</td><td>{cell(row.saldo_acreedor)}</td><td>{cell(row.activo)}</td><td>{cell(row.pasivo)}</td><td>{cell(row.resultado_positivo)}</td><td className="align-right">{cell(row.resultado_negativo)}</td></tr>)}
+      {!!rows.length && totals && <>
+        <tr><th colSpan="2">Sumas</th>{fields.map((field) => summaryCell(field, totals[field]))}</tr>
+        <tr><th colSpan="2">Totales</th>{fields.map((field) => summaryCell(field, ['debe', 'haber', 'saldo_deudor', 'saldo_acreedor'].includes(field) ? totals[field] : differences.find((item) => item.columna === field)?.monto))}</tr>
+      </>}
+      {!rows.length && <tr><td colSpan="10"><EmptyState label="No hay movimientos contables hasta el cierre del período seleccionado." /></td></tr>}
     </tbody></table></div>
   </>
 }
@@ -501,7 +585,7 @@ function OperationForm({ type, lookups, createdParty, initialRecord, onAddParty,
   }
   // La interfaz anticipa el total para orientar el pago; la validacion definitiva ocurre en el backend.
   const net = items.reduce((total, item) => total + Math.round(priceFor(item) * Number(item.cantidad || 0) * 100) / 100, 0)
-  const tax = (sale && monotributista) || (!sale && tipo === 'FACTURA_B') ? 0 : Math.round(net * 0.21 * 100) / 100
+  const tax = (sale && monotributista) || (!sale && tipo !== 'FACTURA_A') ? 0 : Math.round(net * 0.21 * 100) / 100
   const total = net + tax
   const setItem = (index, key, value) => setItems((old) => old.map((item, i) => i === index ? { ...item, [key]: value } : item))
   const setPayment = (index, key, value) => setPaymentRows((old) => old.map((item, i) => i === index ? { ...item, [key]: value } : item))
@@ -519,7 +603,11 @@ function OperationForm({ type, lookups, createdParty, initialRecord, onAddParty,
       recargo_porcentaje: Number(row.recargo_porcentaje || 0),
     }))
     const payload = {
-      ...(sale ? { cliente_id: Number(partyId), emisor_monotributista: monotributista } : { proveedor_id: Number(partyId), numero_comprobante: numero, tipo_comprobante: tipo }),
+      ...(sale ? { cliente_id: Number(partyId), emisor_monotributista: monotributista } : {
+        proveedor_id: Number(partyId),
+        numero_comprobante: tipo === 'SIN_COMPROBANTE' ? null : numero,
+        tipo_comprobante: tipo,
+      }),
       fecha,
       items: items.map((item) => item.libre
         ? { descripcion: item.descripcion.trim(), cantidad: Number(item.cantidad), precio_unitario: Number(item.precio_unitario), ...(!sale ? { cuenta_codigo: item.cuenta_codigo || '5.2.01' } : {}) }
@@ -535,7 +623,14 @@ function OperationForm({ type, lookups, createdParty, initialRecord, onAddParty,
     <div className="modal-heading"><div><div className="eyebrow">{initialRecord ? 'EDICIÓN INTERNA DE VENTA' : 'NUEVA OPERACIÓN'}</div><h2>{initialRecord ? `Editar venta ${initialRecord.numero_comprobante}` : sale ? 'Registrar venta' : 'Registrar compra'}</h2></div><button type="button" className="icon-button" onClick={onCancel} aria-label="Cerrar"><X size={19} /></button></div>
     {initialRecord && <div className="notice">Se conservará el número del comprobante. Si ya fue emitido fuera del sistema, gestioná allí la corrección fiscal correspondiente.</div>}
     {error && <div className="notice error">{error}</div>}
-    <div className="form-grid"><div className="party-field"><label>{sale ? 'Cliente' : 'Proveedor'}<select required value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Seleccionar…</option>{partyList.map((row) => <option key={row.id} value={row.id}>{row.razon_social}</option>)}</select></label><button type="button" className="text-action" onClick={onAddParty}><Plus size={14} />Agregar {sale ? 'cliente' : 'proveedor'}</button></div><label>Fecha<input required type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>{sale && <label className="check-field"><span>Facturación</span><span><input type="checkbox" checked={monotributista} onChange={(event) => setMonotributista(event.target.checked)} /> Monotributista (Factura C)</span></label>}{!sale && <><label>Tipo de factura<select value={tipo} onChange={(event) => setTipo(event.target.value)}><option value="FACTURA_A">Factura A (discrimina IVA)</option><option value="FACTURA_B">Factura B (sin crédito fiscal)</option></select></label><label>Número de factura del proveedor<input required value={numero} onChange={(event) => setNumero(event.target.value)} placeholder="0001-00001234" /></label></>}</div>        <div className="form-section-head"><b>{sale ? 'Productos' : 'Productos y gastos'}</b><span><button type="button" className="text-action" onClick={() => setItems((old) => [...old, { producto_id: '', cantidad: 1, precio_unitario: '' }])}><Plus size={14} />Agregar línea</button>{!sale && <button type="button" className="text-action" onClick={() => setItems((old) => [...old, { libre: true, descripcion: '', cantidad: 1, precio_unitario: '', cuenta_codigo: '5.2.01' }])}><Plus size={14} />Producto no catalogado</button>}</span></div>
+    <div className="form-grid"><div className="party-field"><label>{sale ? 'Cliente' : 'Proveedor'}<select required value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Seleccionar…</option>{partyList.map((row) => <option key={row.id} value={row.id}>{row.razon_social}</option>)}</select></label><button type="button" className="text-action" onClick={onAddParty}><Plus size={14} />Agregar {sale ? 'cliente' : 'proveedor'}</button></div><label>Fecha<input required type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} /></label>{sale && <label className="check-field"><span>Facturación</span><span><input type="checkbox" checked={monotributista} onChange={(event) => setMonotributista(event.target.checked)} /> Monotributista (Factura C)</span></label>}{!sale && <><label>Comprobante<select value={tipo} onChange={(event) => {
+      setTipo(event.target.value)
+      if (event.target.value === 'SIN_COMPROBANTE') {
+        setItems([{ libre: true, descripcion: '', cantidad: 1, precio_unitario: '', cuenta_codigo: '5.2.01' }])
+      }
+    }}><option value="FACTURA_A">Factura A (discrimina IVA)</option><option value="FACTURA_B">Factura B (sin crédito fiscal)</option><option value="SIN_COMPROBANTE">Gasto sin factura</option></select></label>{tipo === 'SIN_COMPROBANTE'
+      ? <p className="form-span">El gasto se registrará sin número de factura ni crédito fiscal de IVA.</p>
+      : <label>Número de factura del proveedor<input required value={numero} onChange={(event) => setNumero(event.target.value)} placeholder="0001-00001234" /></label>}</>}</div>        <div className="form-section-head"><b>{sale ? 'Productos' : tipo === 'SIN_COMPROBANTE' ? 'Detalle del gasto' : 'Productos y gastos'}</b><span><button type="button" className="text-action" onClick={() => setItems((old) => [...old, { producto_id: '', cantidad: 1, precio_unitario: '' }])}><Plus size={14} />Agregar línea</button>{!sale && <button type="button" className="text-action" onClick={() => setItems((old) => [...old, { libre: true, descripcion: '', cantidad: 1, precio_unitario: '', cuenta_codigo: '5.2.01' }])}><Plus size={14} />Producto no catalogado</button>}</span></div>
     <div className="line-items">{items.map((item, index) => <div className={`line-item${item.libre ? ' free-line' : ''}`} key={index}>{item.libre ? <div className="free-line-details"><input aria-label="Descripción" required maxLength={180} placeholder="Nombre del producto o servicio" value={item.descripcion} onChange={(event) => setItem(index, 'descripcion', event.target.value)} />{!sale && <select className="line-account" aria-label="Cuenta contable" required value={item.cuenta_codigo || '5.2.01'} onChange={(event) => setItem(index, 'cuenta_codigo', event.target.value)}><optgroup label="Activos">{[['1.2.01', 'Rodados'], ['1.2.02', 'Muebles y Útiles'], ['1.2.03', 'Instalaciones'], ['1.2.04', 'Inmuebles'], ['1.2.05', 'Maquinarias'], ['1.2.06', 'Materias Primas'], ['1.2.07', 'Equipos de Computación']].map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</optgroup><optgroup label="Gastos">{[['5.2.01', 'Gastos y Servicios Varios'], ['5.2.03', 'Alquileres Perdidos'], ['5.2.04', 'Sueldos y Jornales'], ['5.2.05', 'Fletes y Acarreos'], ['5.2.06', 'Descuentos Cedidos'], ['5.2.07', 'Seguros'], ['5.2.08', 'Impuestos'], ['5.2.09', 'Intereses Perdidos'], ['5.2.10', 'Gastos Generales'], ['5.2.11', 'Comisiones Perdidas'], ['5.2.12', 'Publicidad Perdida']].map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</optgroup></select>}</div> : <select aria-label="Producto" required value={item.producto_id} onChange={(event) => setItem(index, 'producto_id', event.target.value)}><option value="">Producto…</option>{lookups.productos.map((product) => <option key={product.id} value={product.id}>{product.nombre}{!sale && ` · stock ${product.stock}`}</option>)}</select>}<input aria-label="Cantidad" required type="number" min="1" step="1" value={item.cantidad} onChange={(event) => setItem(index, 'cantidad', event.target.value)} />{(!sale || initialRecord) && <input aria-label="Precio unitario" required type="number" min="0" step="0.01" placeholder={sale ? 'Precio de venta' : 'Precio neto'} value={item.precio_unitario} onChange={(event) => setItem(index, 'precio_unitario', event.target.value)} />}<b className="line-total">{money(priceFor(item) * Number(item.cantidad || 0))}</b>{items.length > 1 && <button type="button" className="icon-button danger-action" aria-label="Quitar producto" onClick={() => setItems((old) => old.filter((_, i) => i !== index))}><X size={15} /></button>}</div>)}</div>
     <div className="form-section-head"><b>Formas de pago</b><button type="button" className="text-action" onClick={() => setPaymentRows((old) => [...old, { forma_pago_id: '', importe: '' }])}><Plus size={14} />Dividir pago</button></div>
     <div className="payment-list">{paymentRows.map((payment, index) => {
